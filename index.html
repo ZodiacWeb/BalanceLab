@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phatthana Lab - ฝึกดุลสมการเคมี</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .glass-dark {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .coeff-box {
+            transition: all 0.3s ease;
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: #f8fafc;
+        }
+        .coeff-box.active {
+            border-color: #f97316;
+            color: #f97316;
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.2);
+        }
+        
+        .btn-control {
+            color: #64748b;
+            transition: all 0.2s;
+            cursor: pointer;
+            padding: 4px 12px;
+            font-size: 1.1rem;
+            background: transparent;
+            border-radius: 6px;
+            margin: 2px 0;
+        }
+        .btn-control:hover:not(:disabled) {
+            color: #f97316;
+            background: rgba(249, 115, 22, 0.1);
+        }
+        .btn-control:active:not(:disabled) {
+            transform: scale(0.9);
+        }
+        .btn-control:disabled {
+            opacity: 0.2;
+            cursor: not-allowed;
+        }
+        
+        .no-select { user-select: none; }
+
+        .hide-scroll::-webkit-scrollbar { height: 6px; }
+        .hide-scroll::-webkit-scrollbar-track { background: transparent; }
+        .hide-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        /* Animations */
+        .scale-unbalanced { transform: rotate(-15deg); transition: transform 0.4s ease; color: #ef4444; }
+        .scale-balanced { transform: rotate(0deg); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); color: #22c55e; }
+        
+        @keyframes pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- AUDIO SYSTEM (Web Audio API) ---
+        const Sound = {
+            ctx: null,
+            init() {
+                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            },
+            play(freq, type, duration, vol, delay = 0) {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime + delay);
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime + delay);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + delay + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(this.ctx.currentTime + delay);
+                osc.stop(this.ctx.currentTime + delay + duration);
+            },
+            click(enabled) {
+                if (!enabled) return;
+                this.play(600, 'sine', 0.05, 0.05); // เสียง Tick สั้นๆ
+            },
+            success(enabled) {
+                if (!enabled) return;
+                // เสียง Chime (C5, E5, G5, C6)
+                this.play(523.25, 'sine', 0.1, 0.1, 0);
+                this.play(659.25, 'sine', 0.1, 0.1, 0.1);
+                this.play(783.99, 'sine', 0.1, 0.1, 0.2);
+                this.play(1046.50, 'sine', 0.3, 0.15, 0.3);
+            },
+            error(enabled) {
+                if (!enabled) return;
+                // เสียง Buzzer ต่ำๆ
+                this.play(250, 'square', 0.15, 0.03, 0);
+                this.play(200, 'square', 0.25, 0.03, 0.15);
+            }
+        };
+
+        // --- ATOM COLORS (VSEPR Cartoon Style) ---
+        const atomColors = {
+            H:  { light: '#ffffff', dark: '#e2e8f0', text: '#334155' },
+            O:  { light: '#fca5a5', dark: '#ef4444', text: '#ffffff' },
+            C:  { light: '#9ca3af', dark: '#475569', text: '#ffffff' },
+            Na: { light: '#d8b4fe', dark: '#9333ea', text: '#ffffff' },
+            Cl: { light: '#86efac', dark: '#16a34a', text: '#064e3b' },
+            Zn: { light: '#cbd5e1', dark: '#64748b', text: '#ffffff' },
+            Fe: { light: '#fbbf24', dark: '#d97706', text: '#ffffff' },
+            Mg: { light: '#fef08a', dark: '#eab308', text: '#713f12' },
+            S:  { light: '#fde047', dark: '#ca8a04', text: '#422006' },
+            Ca: { light: '#bbf7d0', dark: '#22c55e', text: '#064e3b' },
+            K:  { light: '#c4b5fd', dark: '#7c3aed', text: '#ffffff' },
+            Ag: { light: '#e2e8f0', dark: '#94a3b8', text: '#0f172a' },
+            Al: { light: '#cbd5e1', dark: '#94a3b8', text: '#0f172a' },
+            Cu: { light: '#fdba74', dark: '#c2410c', text: '#ffffff' },
+            N:  { light: '#93c5fd', dark: '#2563eb', text: '#ffffff' },
+        };
+        const getAtomColor = (a) => atomColors[a] || { light: '#e2e8f0', dark: '#64748b', text: '#ffffff' };
+
+        // --- VSEPR MOLECULE GEOMETRY MAPPING ---
+        const moleculeLayouts = {
+            "H2": { nodes: [{e:"H",x:35,y:50}, {e:"H",x:65,y:50}], links: [[0,1]] },
+            "O2": { nodes: [{e:"O",x:35,y:50}, {e:"O",x:65,y:50}], links: [[0,1]] },
+            "N2": { nodes: [{e:"N",x:35,y:50}, {e:"N",x:65,y:50}], links: [[0,1]] },
+            "H2O": { nodes: [{e:"O",x:50,y:40}, {e:"H",x:25,y:65}, {e:"H",x:75,y:65}], links: [[0,1], [0,2]] },
+            "NH3": { nodes: [{e:"N",x:50,y:35}, {e:"H",x:20,y:65}, {e:"H",x:50,y:75}, {e:"H",x:80,y:65}], links: [[0,1], [0,2], [0,3]] },
+            "C": { nodes: [{e:"C",x:50,y:50}], links: [] },
+            "CO2": { nodes: [{e:"O",x:15,y:50}, {e:"C",x:50,y:50}, {e:"O",x:85,y:50}], links: [[0,1], [1,2]] },
+            "H2O2": { nodes: [{e:"O",x:35,y:40}, {e:"O",x:65,y:40}, {e:"H",x:15,y:70}, {e:"H",x:85,y:70}], links: [[0,1], [0,2], [1,3]] },
+            "KClO3": { nodes: [{e:"K",x:15,y:50}, {e:"Cl",x:55,y:50}, {e:"O",x:55,y:20}, {e:"O",x:35,y:70}, {e:"O",x:75,y:70}], links: [[1,2], [1,3], [1,4]] },
+            "KCl": { nodes: [{e:"K",x:35,y:50}, {e:"Cl",x:65,y:50}], links: [[0,1]] },
+            "CaCO3": { nodes: [{e:"Ca",x:20,y:20}, {e:"C",x:70,y:50}, {e:"O",x:70,y:15}, {e:"O",x:40,y:65}, {e:"O",x:100,y:65}], links: [[1,2], [1,3], [1,4]] },
+            "CaO": { nodes: [{e:"Ca",x:35,y:50}, {e:"O",x:65,y:50}], links: [[0,1]] },
+            "Zn": { nodes: [{e:"Zn",x:50,y:50}], links: [] },
+            "HCl": { nodes: [{e:"H",x:35,y:50}, {e:"Cl",x:65,y:50}], links: [[0,1]] },
+            "MgCl2": { nodes: [{e:"Cl",x:20,y:50}, {e:"Mg",x:50,y:50}, {e:"Cl",x:80,y:50}], links: [[0,1], [1,2]] },
+            "ZnCl2": { nodes: [{e:"Cl",x:15,y:50}, {e:"Zn",x:50,y:50}, {e:"Cl",x:85,y:50}], links: [[0,1], [1,2]] },
+            "Fe": { nodes: [{e:"Fe",x:50,y:50}], links: [] },
+            "CuSO4": { nodes: [{e:"Cu",x:20,y:20}, {e:"S",x:65,y:50}, {e:"O",x:65,y:15}, {e:"O",x:30,y:50}, {e:"O",x:65,y:85}, {e:"O",x:100,y:50}], links: [[1,2], [1,3], [1,4], [1,5]] },
+            "FeSO4": { nodes: [{e:"Fe",x:20,y:20}, {e:"S",x:65,y:50}, {e:"O",x:65,y:15}, {e:"O",x:30,y:50}, {e:"O",x:65,y:85}, {e:"O",x:100,y:50}], links: [[1,2], [1,3], [1,4], [1,5]] },
+            "Cu": { nodes: [{e:"Cu",x:50,y:50}], links: [] },
+            "Mg": { nodes: [{e:"Mg",x:50,y:50}], links: [] },
+            "AgNO3": { nodes: [{e:"Ag",x:20,y:20}, {e:"N",x:70,y:55}, {e:"O",x:70,y:20}, {e:"O",x:40,y:75}, {e:"O",x:100,y:75}], links: [[1,2], [1,3], [1,4]] },
+            "Mg(NO3)2": { nodes: [{e:"Mg",x:50,y:50}, {e:"N",x:20,y:20}, {e:"O",x:20,y:-5}, {e:"O",x:-5,y:35}, {e:"O",x:45,y:35}, {e:"N",x:80,y:80}, {e:"O",x:80,y:105}, {e:"O",x:55,y:65}, {e:"O",x:105,y:65}], links: [[1,2], [1,3], [1,4], [5,6], [5,7], [5,8]] },
+            "Ag": { nodes: [{e:"Ag",x:50,y:50}], links: [] },
+            "NaOH": { nodes: [{e:"Na",x:25,y:50}, {e:"O",x:60,y:50}, {e:"H",x:90,y:50}], links: [[0,1], [1,2]] },
+            "NaCl": { nodes: [{e:"Na",x:35,y:50}, {e:"Cl",x:65,y:50}], links: [[0,1]] },
+            "H2SO4": { nodes: [{e:"S",x:50,y:50}, {e:"O",x:50,y:15}, {e:"O",x:15,y:50}, {e:"O",x:50,y:85}, {e:"O",x:85,y:50}, {e:"H",x:15,y:15}, {e:"H",x:85,y:15}], links: [[0,1], [0,2], [0,3], [0,4], [2,5], [4,6]] },
+            "KOH": { nodes: [{e:"K",x:25,y:50}, {e:"O",x:60,y:50}, {e:"H",x:90,y:50}], links: [[0,1], [1,2]] },
+            "K2SO4": { nodes: [{e:"S",x:50,y:50}, {e:"O",x:50,y:15}, {e:"O",x:15,y:50}, {e:"O",x:50,y:85}, {e:"O",x:85,y:50}, {e:"K",x:15,y:15}, {e:"K",x:85,y:15}], links: [[0,1], [0,2], [0,3], [0,4]] },
+            "Al": { nodes: [{e:"Al",x:50,y:50}], links: [] },
+            "Na2ZnO2": { nodes: [{e:"Zn",x:50,y:50}, {e:"O",x:20,y:50}, {e:"O",x:80,y:50}, {e:"Na",x:20,y:15}, {e:"Na",x:80,y:15}], links: [[0,1], [0,2]] },
+            "NaAlO2": { nodes: [{e:"Al",x:50,y:50}, {e:"O",x:20,y:50}, {e:"O",x:80,y:50}, {e:"Na",x:50,y:15}], links: [[0,1], [0,2]] },
+            "Fe2O3": { nodes: [{e:"Fe",x:35,y:50}, {e:"Fe",x:75,y:50}, {e:"O",x:55,y:50}, {e:"O",x:20,y:20}, {e:"O",x:90,y:20}], links: [[0,2], [1,2], [0,3], [1,4]] },
+            "Fe(OH)3": { nodes: [{e:"Fe",x:50,y:50}, {e:"O",x:20,y:20}, {e:"H",x:5,y:5}, {e:"O",x:80,y:20}, {e:"H",x:95,y:5}, {e:"O",x:50,y:85}, {e:"H",x:50,y:110}], links: [[0,1], [1,2], [0,3], [3,4], [0,5], [5,6]] },
+            "CH4": { nodes: [{e:"C",x:50,y:50}, {e:"H",x:50,y:15}, {e:"H",x:15,y:70}, {e:"H",x:85,y:70}, {e:"H",x:50,y:90}], links: [[0,1], [0,2], [0,3], [0,4]] }, 
+            "C3H8": { nodes: [
+                {e:"C",x:20,y:50}, {e:"C",x:50,y:50}, {e:"C",x:80,y:50}, 
+                {e:"H",x:20,y:15}, {e:"H",x:-5,y:50}, {e:"H",x:20,y:85}, 
+                {e:"H",x:50,y:15}, {e:"H",x:50,y:85}, 
+                {e:"H",x:80,y:15}, {e:"H",x:105,y:50}, {e:"H",x:80,y:85}
+            ], links: [[0,1], [1,2], [0,3], [0,4], [0,5], [1,6], [1,7], [2,8], [2,9], [2,10]] },
+            "SO3": { nodes: [{e:"S",x:50,y:50}, {e:"O",x:50,y:15}, {e:"O",x:20,y:70}, {e:"O",x:80,y:70}], links: [[0,1], [0,2], [0,3]] },
+            "NO2": { nodes: [{e:"N",x:50,y:40}, {e:"O",x:20,y:70}, {e:"O",x:80,y:70}], links: [[0,1], [0,2]] },
+            "HNO3": { nodes: [{e:"N",x:50,y:45}, {e:"O",x:20,y:70}, {e:"O",x:80,y:70}, {e:"O",x:50,y:15}, {e:"H",x:80,y:35}], links: [[0,1], [0,2], [0,3], [2,4]] },
+            "NO": { nodes: [{e:"N",x:35,y:50}, {e:"O",x:65,y:50}], links: [[0,1]] },
+            "Al2(SO4)3": {
+                nodes: [
+                    {e:"Al", x:40, y:20}, {e:"Al", x:80, y:20},
+                    {e:"S", x:20, y:60}, {e:"O", x:20, y:35}, {e:"O", x:20, y:85}, {e:"O", x:-5, y:60}, {e:"O", x:45, y:60},
+                    {e:"S", x:100, y:60}, {e:"O", x:100, y:35}, {e:"O", x:100, y:85}, {e:"O", x:75, y:60}, {e:"O", x:125, y:60},
+                    {e:"S", x:60, y:100}, {e:"O", x:60, y:75}, {e:"O", x:60, y:125}, {e:"O", x:35, y:100}, {e:"O", x:85, y:100}
+                ],
+                links: [
+                    [2,3], [2,4], [2,5], [2,6],
+                    [7,8], [7,9], [7,10], [7,11],
+                    [12,13], [12,14], [12,15], [12,16]
+                ]
+            },
+            "C6H12O6": {
+                nodes: [
+                    {e:"O", x:50, y:20}, {e:"C", x:75, y:35}, {e:"C", x:75, y:65}, {e:"C", x:50, y:80}, {e:"C", x:25, y:65}, {e:"C", x:25, y:35},
+                    {e:"C", x:25, y:5}, {e:"O", x:100, y:35}, {e:"O", x:100, y:65}, {e:"O", x:50, y:105}, {e:"O", x:0, y:65}, {e:"O", x:0, y:5},
+                    {e:"H", x:65, y:10}, {e:"H", x:85, y:20}, {e:"H", x:90, y:80}, {e:"H", x:65, y:90}, {e:"H", x:35, y:90}, {e:"H", x:10, y:80},
+                    {e:"H", x:10, y:20}, {e:"H", x:40, y:5}, {e:"H", x:115, y:35}, {e:"H", x:115, y:65}, {e:"H", x:50, y:120}, {e:"H", x:-15, y:5}
+                ],
+                links: [
+                    [0,1], [1,2], [2,3], [3,4], [4,5], [5,0], [5,6], [1,7], [2,8], [3,9], [4,10], [6,11],
+                    [7,20], [8,21], [9,22], [10,17], [11,23], [1,13], [2,14], [3,15], [4,16], [5,18], [6,19], [6,12]
+                ]
+            }
+        };
+
+        const MoleculeSVG = ({ formula, atomsObj }) => {
+            let layout = moleculeLayouts[formula];
+            
+            if (!layout) {
+                let nodes = [], links = [];
+                Object.entries(atomsObj).forEach(([a, c]) => {
+                    for(let i=0; i<c; i++) nodes.push({e: a});
+                });
+                
+                const count = nodes.length;
+                if(count === 1) { 
+                    nodes[0].x = 50; nodes[0].y = 50; 
+                } else if(count === 2) { 
+                    nodes[0].x=35; nodes[0].y=50; nodes[1].x=65; nodes[1].y=50; links=[[0,1]]; 
+                } else if(count <= 6) {
+                    const r = count > 4 ? 35 : 25;
+                    nodes.forEach((n, idx) => {
+                        n.x = 50 + r * Math.cos(2 * Math.PI * idx / count);
+                        n.y = 50 + r * Math.sin(2 * Math.PI * idx / count);
+                        if(idx > 0) links.push([0, idx]);
+                    });
+                } else {
+                    const cols = Math.ceil(Math.sqrt(count));
+                    const spacing = 30;
+                    const offsetX = 50 - ((cols - 1) * spacing) / 2;
+                    const offsetY = 50 - ((Math.ceil(count / cols) - 1) * spacing) / 2;
+                    nodes.forEach((n, idx) => {
+                        n.x = offsetX + (idx % cols) * spacing;
+                        n.y = offsetY + Math.floor(idx / cols) * spacing;
+                        if (idx % cols > 0) links.push([idx - 1, idx]);
+                        if (Math.floor(idx / cols) > 0) links.push([idx - cols, idx]);
+                    });
+                }
+                layout = { nodes, links };
+            }
+
+            const scale = 1.4;
+            const scaledNodes = layout.nodes.map(n => ({
+                e: n.e,
+                x: (n.x - 50) * scale + 50,
+                y: (n.y - 50) * scale + 50
+            }));
+
+            const radius = 16;
+            let maxDist = 0;
+            scaledNodes.forEach(n => {
+                maxDist = Math.max(maxDist, Math.abs(n.x - 50), Math.abs(n.y - 50));
+            });
+            const halfSize = maxDist + radius + 4; 
+            const size = halfSize * 2;
+            const vbX = 50 - halfSize;
+            const vbY = 50 - halfSize;
+
+            const safeFormula = formula.replace(/[^a-zA-Z0-9]/g, '');
+
+            return (
+                <svg height="80" viewBox={`${vbX} ${vbY} ${size} ${size}`} className="drop-shadow-lg mx-1 my-1 overflow-visible">
+                    <defs>
+                        <filter id={`shadow-${safeFormula}`}>
+                            <feDropShadow dx="1.5" dy="2.5" stdDeviation="1.5" floodColor="#000000" floodOpacity="0.4" />
+                        </filter>
+                    </defs>
+                    
+                    {layout.links.map((link, i) => {
+                        const n1 = scaledNodes[link[0]];
+                        const n2 = scaledNodes[link[1]];
+                        return (
+                            <g key={`bond-${i}`}>
+                                <line x1={n1.x} y1={n1.y} x2={n2.x} y2={n2.y} stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
+                                <line x1={n1.x} y1={n1.y} x2={n2.x} y2={n2.y} stroke="#94a3b8" strokeWidth="6" strokeLinecap="round" />
+                            </g>
+                        );
+                    })}
+
+                    {scaledNodes.map((n, i) => {
+                        const c = getAtomColor(n.e);
+                        return (
+                            <g key={`atom-${i}`} filter={`url(#shadow-${safeFormula})`}>
+                                <circle cx={n.x} cy={n.y} r={radius} fill={c.dark} />
+                                <circle cx={n.x} cy={n.y} r={radius} fill={`url(#grad-${safeFormula}-${i})`} />
+                                <radialGradient id={`grad-${safeFormula}-${i}`} cx="35%" cy="30%" r="65%">
+                                    <stop offset="0%" stopColor={c.light} />
+                                    <stop offset="100%" stopColor={c.dark} stopOpacity="0" />
+                                </radialGradient>
+                                <ellipse cx={n.x - 5} cy={n.y - 6} rx="5" ry="3" fill="#ffffff" opacity="0.6" transform={`rotate(-40 ${n.x - 5} ${n.y - 6})`} />
+                                <text x={n.x} y={n.y} fill={c.text} fontSize="14" fontWeight="800" textAnchor="middle" dominantBaseline="central" className="font-sans" style={{textShadow: '0px 1px 2px rgba(0,0,0,0.3)'}}>
+                                    {n.e}
+                                </text>
+                            </g>
+                        );
+                    })}
+                </svg>
+            );
+        };
+
+        // --- DATABASE ---
+        const db = [
+            {
+                category: "การรวมตัว",
+                equations: [
+                    { id: "c1", name: "การเกิดน้ำ", fact: "น้ำครอบคลุมพื้นผิวโลกกว่า 71% และเป็นสิ่งสำคัญที่สุดต่อสิ่งมีชีวิต", reactants: [{f: "H2", s: "g", atoms: {H:2}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [2, 1], p: [2] } },
+                    { id: "c2", name: "การสังเคราะห์แอมโมเนีย", fact: "กระบวนการนี้เรียกว่า Haber process เป็นแหล่งผลิตปุ๋ยเคมีที่สำคัญที่สุดของโลก!", reactants: [{f: "N2", s: "g", atoms: {N:2}}, {f: "H2", s: "g", atoms: {H:2}}], products: [{f: "NH3", s: "g", atoms: {N:1, H:3}}], ans: { r: [1, 3], p: [2] } },
+                    { id: "c3", name: "การเกิดคาร์บอนไดออกไซด์", fact: "คาร์บอนไดออกไซด์เป็นก๊าซเรือนกระจกที่เกิดจากการเผาไหม้แบบสมบูรณ์", reactants: [{f: "C", s: "s", atoms: {C:1}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}], ans: { r: [1, 1], p: [1] } }
+                ]
+            },
+            {
+                category: "การแยกสลาย",
+                equations: [
+                    { id: "d1", name: "การแยกสลายน้ำยาล้างแผล", fact: "น้ำยาล้างแผลสลายตัวให้ก๊าซออกซิเจน ซึ่งทำให้เกิดฟองฟู่และช่วยฆ่าเชื้อโรคได้", reactants: [{f: "H2O2", s: "aq", atoms: {H:2, O:2}}], products: [{f: "H2O", s: "l", atoms: {H:2, O:1}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [2], p: [2, 1] } },
+                    { id: "d2", name: "การสลายตัวของด่างทับทิม", reactants: [{f: "KClO3", s: "s", atoms: {K:1, Cl:1, O:3}}], products: [{f: "KCl", s: "s", atoms: {K:1, Cl:1}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [2], p: [2, 3] } },
+                    { id: "d3", name: "การเผาหินปูน", reactants: [{f: "CaCO3", s: "s", atoms: {Ca:1, C:1, O:3}}], products: [{f: "CaO", s: "s", atoms: {Ca:1, O:1}}, {f: "CO2", s: "g", atoms: {C:1, O:2}}], ans: { r: [1], p: [1, 1] } }
+                ]
+            },
+            {
+                category: "การแทนที่",
+                equations: [
+                    { id: "r1", name: "สังกะสีทำปฏิกิริยากับกรด", fact: "ก๊าซไฮโดรเจนที่เกิดขึ้นจะติดไฟและเกิดเสียง 'ป๊อป' เมื่อทดสอบด้วยเปลวไฟ!", reactants: [{f: "Zn", s: "s", atoms: {Zn:1}}, {f: "HCl", s: "aq", atoms: {H:1, Cl:1}}], products: [{f: "ZnCl2", s: "aq", atoms: {Zn:1, Cl:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
+                    { id: "r2", name: "เหล็กกับจุนสี", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "CuSO4", s: "aq", atoms: {Cu:1, S:1, O:4}}], products: [{f: "FeSO4", s: "aq", atoms: {Fe:1, S:1, O:4}}, {f: "Cu", s: "s", atoms: {Cu:1}}], ans: { r: [1, 1], p: [1, 1] } },
+                    { id: "r3", name: "แมกนีเซียมกับซิลเวอร์ไนเตรต", reactants: [{f: "Mg", s: "s", atoms: {Mg:1}}, {f: "AgNO3", s: "aq", atoms: {Ag:1, N:1, O:3}}], products: [{f: "Mg(NO3)2", s: "aq", atoms: {Mg:1, N:2, O:6}}, {f: "Ag", s: "s", atoms: {Ag:1}}], ans: { r: [1, 2], p: [1, 2] } }
+                ]
+            },
+            {
+                category: "กรดกับเบส",
+                equations: [
+                    { id: "ab1", name: "การเกิดเกลือแกง (สะเทิน)", fact: "ปฏิกิริยาสะเทินระหว่างกรดแก่และเบสแก่ จะได้เกลือแกง (NaCl) และน้ำเสมอ", reactants: [{f: "HCl", s: "aq", atoms: {H:1, Cl:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}], products: [{f: "NaCl", s: "aq", atoms: {Na:1, Cl:1}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [1, 1], p: [1, 1] } },
+                    { id: "ab2", name: "กรดซัลฟิวริกกับด่างคลี", reactants: [{f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}, {f: "KOH", s: "aq", atoms: {K:1, O:1, H:1}}], products: [{f: "K2SO4", s: "aq", atoms: {K:2, S:1, O:4}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [1, 2], p: [1, 2] } }
+                ]
+            },
+            {
+                category: "กรดกับโลหะ",
+                equations: [
+                    { id: "am1", name: "แมกนีเซียมกับกรดเกลือ", reactants: [{f: "Mg", s: "s", atoms: {Mg:1}}, {f: "HCl", s: "aq", atoms: {H:1, Cl:1}}], products: [{f: "MgCl2", s: "aq", atoms: {Mg:1, Cl:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
+                    { id: "am2", name: "อะลูมิเนียมกับกรดซัลฟิวริก", reactants: [{f: "Al", s: "s", atoms: {Al:1}}, {f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}], products: [{f: "Al2(SO4)3", s: "aq", atoms: {Al:2, S:3, O:12}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [2, 3], p: [1, 3] } }
+                ]
+            },
+            {
+                category: "เบสกับโลหะ",
+                equations: [
+                    { id: "bm1", name: "สังกะสีกับโซเดียมไฮดรอกไซด์", reactants: [{f: "Zn", s: "s", atoms: {Zn:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}], products: [{f: "Na2ZnO2", s: "aq", atoms: {Na:2, Zn:1, O:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
+                    { id: "bm2", name: "อะลูมิเนียมกับเบส", reactants: [{f: "Al", s: "s", atoms: {Al:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "NaAlO2", s: "aq", atoms: {Na:1, Al:1, O:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [2, 2, 2], p: [2, 3] } }
+                ]
+            },
+            {
+                category: "การเกิดสนิมเหล็ก",
+                equations: [
+                    { id: "ru1", name: "สนิมเหล็กพื้นฐาน", fact: "สนิมเหล็กทำให้โครงสร้างเหล็กผุกร่อนและอ่อนแอลง การทาสีหรือเคลือบน้ำมันช่วยป้องกันได้", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "Fe2O3", s: "s", atoms: {Fe:2, O:3}}], ans: { r: [4, 3], p: [2] } },
+                    { id: "ru2", name: "สนิมเหล็ก (มีน้ำ)", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "O2", s: "g", atoms: {O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "Fe(OH)3", s: "s", atoms: {Fe:1, O:3, H:3}}], ans: { r: [4, 3, 6], p: [4] } }
+                ]
+            },
+            {
+                category: "การเผาไหม้",
+                equations: [
+                    { id: "cb1", name: "การเผาไหม้ก๊าซมีเทน", reactants: [{f: "CH4", s: "g", atoms: {C:1, H:4}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "g", atoms: {H:2, O:1}}], ans: { r: [1, 2], p: [1, 2] } },
+                    { id: "cb2", name: "การเผาไหม้ก๊าซโพรเพน", fact: "โพรเพนคือส่วนประกอบหลักในก๊าซหุงต้ม (LPG) ที่เราใช้ทำอาหารในบ้านนั่นเอง!", reactants: [{f: "C3H8", s: "g", atoms: {C:3, H:8}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "g", atoms: {H:2, O:1}}], ans: { r: [1, 5], p: [3, 4] } }
+                ]
+            },
+            {
+                category: "การเกิดฝนกรด",
+                equations: [
+                    { id: "ar1", name: "ก๊าซซัลเฟอร์ไตรออกไซด์", fact: "ก๊าซซัลเฟอร์ไตรออกไซด์มักเกิดจากการเผาไหม้ถ่านหินในโรงงาน และเป็นตัวการหลักของฝนกรด", reactants: [{f: "SO3", s: "g", atoms: {S:1, O:3}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}], ans: { r: [1, 1], p: [1] } },
+                    { id: "ar2", name: "ก๊าซไนโตรเจนไดออกไซด์", reactants: [{f: "NO2", s: "g", atoms: {N:1, O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "HNO3", s: "aq", atoms: {H:1, N:1, O:3}}, {f: "NO", s: "g", atoms: {N:1, O:1}}], ans: { r: [3, 1], p: [2, 1] } }
+                ]
+            },
+            {
+                category: "การสังเคราะห์แสง",
+                equations: [
+                    { id: "ph1", name: "กระบวนการสังเคราะห์ด้วยแสง", fact: "นี่คือปฏิกิริยาที่สำคัญที่สุดของพืช! เปลี่ยนพลังงานแสงให้เป็นน้ำตาลเพื่อเป็นอาหาร", reactants: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "C6H12O6", s: "aq", atoms: {C:6, H:12, O:6}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [6, 6], p: [1, 6] } }
+                ]
+            }
+        ];
+
+        const allEquations = db.flatMap(cat => cat.equations.map(eq => ({ ...eq, categoryName: cat.category })));
+
+        // --- UTILS ---
+        const formatFormula = (formula) => {
+            const formatted = formula.replace(/([A-Za-z\)])(\d+)/g, '$1<sub>$2</sub>');
+            return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
+        };
+
+        // --- COMPONENTS ---
+
+        // 1. Equation Solver
+        const EquationSolver = ({ equation, onNext, hideHeader = false, customLogic = null, showStateSymbols = true, showParticles = false, onToggleStateSymbols, onToggleParticles, onSuccessFirstTry, onFail, isTutorial = false, soundEnabled = true }) => {
+            const [coeffs, setCoeffs] = useState({ r: [], p: [] });
+            const [status, setStatus] = useState('idle');
+            const [hint, setHint] = useState('');
+            const [attempts, setAttempts] = useState(0);
+            const [showAnswerPopup, setShowAnswerPopup] = useState(false);
+
+            useEffect(() => {
+                if (customLogic && customLogic.overrideCoeffs) {
+                    setCoeffs(customLogic.overrideCoeffs);
+                } else {
+                    setCoeffs({
+                        r: Array(equation.reactants.length).fill(1),
+                        p: Array(equation.products.length).fill(1)
+                    });
+                }
+                setStatus('idle');
+                setHint('');
+                setAttempts(0);
+                setShowAnswerPopup(false);
+            }, [equation, customLogic?.overrideCoeffs]);
+
+            const adjustCoeff = (side, index, delta) => {
+                if (status === 'correct' || (customLogic && customLogic.locked)) return;
+                
+                Sound.click(soundEnabled); // Play click sound
+                
+                setCoeffs(prev => {
+                    const newSide = [...prev[side]];
+                    let newVal = newSide[index] + delta;
+                    if (newVal < 1) newVal = 1;
+                    if (newVal > 99) newVal = 99;
+                    newSide[index] = newVal;
+                    
+                    const newCoeffs = { ...prev, [side]: newSide };
+                    if (customLogic && customLogic.onChange) customLogic.onChange(newCoeffs);
+                    return newCoeffs;
+                });
+                
+                if (status === 'incorrect') {
+                    setStatus('idle');
+                    setHint('');
+                }
+                if (customLogic && customLogic.status === 'incorrect' && customLogic.setStatus) {
+                    customLogic.setStatus('idle');
+                }
+            };
+
+            const rCounts = {};
+            const pCounts = {};
+            equation.reactants.forEach((mol, i) => {
+                Object.entries(mol.atoms).forEach(([atom, count]) => { rCounts[atom] = (rCounts[atom] || 0) + count * coeffs.r[i]; });
+            });
+            equation.products.forEach((mol, i) => {
+                Object.entries(mol.atoms).forEach(([atom, count]) => { pCounts[atom] = (pCounts[atom] || 0) + count * coeffs.p[i]; });
+            });
+            
+            const allAtoms = Array.from(new Set([...Object.keys(rCounts), ...Object.keys(pCounts)])).sort();
+            const isCurrentlyBalanced = allAtoms.every(atom => (rCounts[atom] || 0) === (pCounts[atom] || 0));
+
+            const handleVerify = () => {
+                if (customLogic && customLogic.onVerify) {
+                    customLogic.onVerify(coeffs);
+                } else {
+                    const isCorrect = coeffs.r.every((val, i) => val === equation.ans.r[i]) && coeffs.p.every((val, i) => val === equation.ans.p[i]);
+                    setAttempts(a => a + 1);
+
+                    if (isCorrect) {
+                        Sound.success(soundEnabled); // Play success sound
+                        setStatus('correct');
+                        setHint(''); 
+                        if (attempts === 0 && onSuccessFirstTry && !isTutorial) onSuccessFirstTry();
+                    } else {
+                        Sound.error(soundEnabled); // Play error sound
+                        setStatus('incorrect');
+                        if (onFail && !isTutorial) onFail(); 
+                        generateHint();
+                    }
+                }
+            };
+
+            const generateHint = () => {
+                Sound.click(soundEnabled);
+                let foundMismatch = false;
+                for (let atom of allAtoms) {
+                    const r = rCounts[atom] || 0;
+                    const p = pCounts[atom] || 0;
+                    if (r !== p) {
+                        setHint(`คำใบ้: ลองเช็คอะตอม ${atom} ดูสิ! ฝั่งซ้ายมี ${r} แต่ฝั่งขวามี ${p} นะ`);
+                        foundMismatch = true;
+                        break;
+                    }
+                }
+                if (!foundMismatch) setHint("สมดุลแล้วนี่นา! ลองกดตรวจสอบคำตอบดูเลย");
+            };
+
+            const handleSkip = () => {
+                Sound.click(soundEnabled);
+                setShowAnswerPopup(true);
+            };
+
+            const closePopupAndNext = () => {
+                Sound.click(soundEnabled);
+                setShowAnswerPopup(false);
+                if (onNext) onNext();
+            };
+
+            const displayStatus = customLogic && customLogic.status ? customLogic.status : status;
+
+            const renderCurrentEq = () => {
+                let html = [];
+                equation.reactants.forEach((mol, i) => {
+                    if (coeffs.r[i] > 1) html.push(<span key={`cr-${i}`} className="text-orange-500 mr-2 font-bold">{coeffs.r[i]}</span>);
+                    html.push(<span key={`mr-${i}`}>{formatFormula(mol.f)}</span>);
+                    if (showStateSymbols) html.push(<span key={`sr-${i}`} className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>);
+                    if (i < equation.reactants.length - 1) html.push(<span key={`pr-${i}`} className="mx-3 text-slate-500 font-bold">+</span>);
+                });
+                html.push(<span key="arrow" className="mx-6 text-orange-500 font-bold">→</span>);
+                equation.products.forEach((mol, i) => {
+                    if (coeffs.p[i] > 1) html.push(<span key={`cp-${i}`} className="text-orange-500 mr-2 font-bold">{coeffs.p[i]}</span>);
+                    html.push(<span key={`mp-${i}`}>{formatFormula(mol.f)}</span>);
+                    if (showStateSymbols) html.push(<span key={`sp-${i}`} className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>);
+                    if (i < equation.products.length - 1) html.push(<span key={`pp-${i}`} className="mx-3 text-slate-500 font-bold">+</span>);
+                });
+                return html;
+            };
+
+            const renderParticleEquation = () => {
+                return (
+                    <div className="flex flex-wrap items-center justify-center w-full px-2 mt-4 gap-y-12">
+                        <div className="flex flex-wrap items-center justify-center">
+                            {equation.reactants.map((mol, i) => (
+                                <React.Fragment key={`pr-${i}`}>
+                                    <div className="relative flex justify-center items-center">
+                                        <div className="flex flex-wrap justify-center items-center max-w-[280px] gap-2">
+                                            {Array.from({length: Math.min(coeffs.r[i], 12)}).map((_, c) => 
+                                                <MoleculeSVG key={c} formula={mol.f} atomsObj={mol.atoms} />
+                                            )}
+                                        </div>
+                                        {coeffs.r[i] > 12 && (
+                                            <div className="absolute -bottom-7 w-full text-center">
+                                                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">+ {coeffs.r[i] - 12}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {i < equation.reactants.length - 1 && <div className="text-slate-400 text-3xl font-black mx-4 leading-none mb-1">+</div>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                        
+                        <div className="text-orange-500 text-4xl mx-6 font-bold leading-none mb-1">→</div>
+                        
+                        <div className="flex flex-wrap items-center justify-center">
+                            {equation.products.map((mol, i) => (
+                                <React.Fragment key={`pp-${i}`}>
+                                    <div className="relative flex justify-center items-center">
+                                        <div className="flex flex-wrap justify-center items-center max-w-[280px] gap-2">
+                                            {Array.from({length: Math.min(coeffs.p[i], 12)}).map((_, c) => 
+                                                <MoleculeSVG key={c} formula={mol.f} atomsObj={mol.atoms} />
+                                            )}
+                                        </div>
+                                        {coeffs.p[i] > 12 && (
+                                            <div className="absolute -bottom-7 w-full text-center">
+                                                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">+ {coeffs.p[i] - 12}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {i < equation.products.length - 1 && <div className="text-slate-400 text-3xl font-black mx-4 leading-none mb-1">+</div>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex flex-col items-center w-full max-w-5xl mx-auto space-y-6 animate-fade-in pb-10">
+                    
+                    {!hideHeader && (
+                        <div className="w-full text-center relative">
+                            <span className="inline-block px-3 py-1 bg-white/10 rounded-full text-orange-400 text-sm font-semibold mb-2 shadow-sm">
+                                {equation.categoryName}
+                            </span>
+                            <h2 className="text-2xl md:text-3xl font-bold">{equation.name}</h2>
+                        </div>
+                    )}
+
+                    {/* Box 1: สมการตอนนี้ */}
+                    <div className="glass-dark w-full p-4 md:p-6 rounded-2xl flex flex-col border border-slate-700/50 shadow-md">
+                        <div className="flex justify-between items-center w-full mb-3 border-b border-slate-700/30 pb-3">
+                            <div className="text-orange-400 text-lg font-semibold flex items-center">
+                                <i className="fa-solid fa-flask mr-2 text-xl"></i>สมการตอนนี้
+                            </div>
+                            <div className={`flex items-center text-lg font-semibold tracking-wide ${isCurrentlyBalanced ? 'text-green-400' : 'text-red-400'}`}>
+                                <i className={`fa-solid fa-scale-balanced text-xl mr-2 ${isCurrentlyBalanced ? 'scale-balanced' : 'scale-unbalanced'}`}></i>
+                                <span>{isCurrentlyBalanced ? 'สมดุลแล้ว' : 'ยังไม่สมดุล'}</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center text-3xl md:text-4xl font-medium pt-3 pb-1 gap-y-4 text-center w-full tracking-wide">
+                            {renderCurrentEq()}
+                        </div>
+                    </div>
+
+                    {/* Box 2: Interactive Equation */}
+                    <div className="glass w-full p-4 md:p-8 rounded-2xl flex flex-col shadow-lg">
+                        <div className="flex justify-between items-center w-full border-b border-slate-700/50 pb-3 mb-5 flex-wrap gap-2">
+                            <div className="text-slate-300 text-sm font-medium flex items-center">
+                                <i className="fa-solid fa-hand-pointer mr-2 text-slate-400"></i>แตะ + / - เพื่อเปลี่ยนเลขหน้าสาร
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                                {onToggleParticles && (
+                                    <button 
+                                        onClick={() => { Sound.click(soundEnabled); onToggleParticles(); }}
+                                        className="text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer bg-transparent border-none hover:text-white"
+                                        style={{ color: showParticles ? '#60a5fa' : '#94a3b8' }}
+                                    >
+                                        <i className={`fa-solid ${showParticles ? 'fa-circle-nodes' : 'fa-circle'}`}></i>
+                                        {showParticles ? 'ปิดโมเดลอนุภาค' : 'เปิดโมเดลอนุภาค'}
+                                    </button>
+                                )}
+                                {onToggleStateSymbols && (
+                                    <button 
+                                        onClick={() => { Sound.click(soundEnabled); onToggleStateSymbols(); }}
+                                        className="text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer bg-transparent border-none hover:text-white"
+                                        style={{ color: showStateSymbols ? '#4ade80' : '#94a3b8' }}
+                                    >
+                                        <i className={`fa-solid ${showStateSymbols ? 'fa-eye' : 'fa-eye-slash'}`}></i>
+                                        สถานะสาร
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-start justify-center pb-4 pt-2 gap-y-10 gap-x-2 w-full">
+                            {equation.reactants.map((mol, i) => (
+                                <React.Fragment key={`r-${i}`}>
+                                    <div className="flex flex-col items-center min-w-max mx-2">
+                                        <div className="flex items-center">
+                                            <div className="flex flex-col items-center no-select mr-3">
+                                                <button className="btn-control" onClick={() => adjustCoeff('r', i, 1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-up"></i></button>
+                                                <div className={`coeff-box w-12 h-14 rounded-xl flex items-center justify-center text-2xl font-bold ${coeffs.r[i] > 1 ? 'active' : ''}`}>
+                                                    {coeffs.r[i]}
+                                                </div>
+                                                <button className="btn-control" onClick={() => adjustCoeff('r', i, -1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-down"></i></button>
+                                            </div>
+                                            <div className="text-2xl md:text-3xl font-medium flex items-baseline gap-1">
+                                                {formatFormula(mol.f)} 
+                                                {showStateSymbols && <span className="text-sm text-slate-500 font-light ml-1">({mol.s})</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {i < equation.reactants.length - 1 && <div className="text-slate-500 text-3xl mx-1 md:mx-3 self-center mt-2">+</div>}
+                                </React.Fragment>
+                            ))}
+
+                            <div className="text-orange-500 text-3xl mx-2 md:mx-4 self-center mt-2 w-full text-center md:w-auto">→</div>
+
+                            {equation.products.map((mol, i) => (
+                                <React.Fragment key={`p-${i}`}>
+                                    <div className="flex flex-col items-center min-w-max mx-2">
+                                        <div className="flex items-center">
+                                            <div className="flex flex-col items-center no-select mr-3">
+                                                <button className="btn-control" onClick={() => adjustCoeff('p', i, 1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-up"></i></button>
+                                                <div className={`coeff-box w-12 h-14 rounded-xl flex items-center justify-center text-2xl font-bold ${coeffs.p[i] > 1 ? 'active' : ''}`}>
+                                                    {coeffs.p[i]}
+                                                </div>
+                                                <button className="btn-control" onClick={() => adjustCoeff('p', i, -1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-down"></i></button>
+                                            </div>
+                                            <div className="text-2xl md:text-3xl font-medium flex items-baseline gap-1">
+                                                {formatFormula(mol.f)} 
+                                                {showStateSymbols && <span className="text-sm text-slate-500 font-light ml-1">({mol.s})</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {i < equation.products.length - 1 && <div className="text-slate-500 text-3xl mx-1 md:mx-3 self-center mt-2">+</div>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Box 3: กล่องโมเดลอนุภาค */}
+                    {showParticles && (
+                        <div className="glass-dark w-full p-6 md:p-10 rounded-2xl flex flex-col border border-slate-700/50 shadow-[0_0_20px_rgba(59,130,246,0.1)] animate-fade-in relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-50"></div>
+                            <div className="text-blue-400 text-base font-semibold flex items-center justify-center md:justify-start border-b border-slate-700/50 pb-4 mb-4">
+                                <i className="fa-solid fa-circle-nodes mr-2 text-lg"></i>ภาพจำลองโมเดลอนุภาค (Particle Model)
+                            </div>
+                            {renderParticleEquation()}
+                        </div>
+                    )}
+
+                    {/* Box 4: Atom Counter Table */}
+                    <div className="glass-dark w-full max-w-lg p-6 rounded-xl border border-slate-700/50 shadow-md">
+                        <table className="w-full text-center">
+                            <thead>
+                                <tr className="border-b border-slate-700 text-slate-400 text-sm">
+                                    <th className="pb-2 w-1/3">ธาตุ</th>
+                                    <th className="pb-2 w-1/3">ซ้าย (สารตั้งต้น)</th>
+                                    <th className="pb-2 w-1/3">ขวา (ผลิตภัณฑ์)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {allAtoms.map(atom => {
+                                    const r = rCounts[atom] || 0;
+                                    const p = pCounts[atom] || 0;
+                                    const isBalanced = r === p;
+                                    const colorClass = isBalanced ? 'text-green-400 font-bold' : 'text-slate-200 font-bold';
+                                    const c = getAtomColor(atom);
+                                    
+                                    return (
+                                        <tr key={atom} className="border-b border-slate-800/50">
+                                            <td className="py-2 text-lg font-medium">
+                                                <div className="flex items-center justify-start w-20 mx-auto">
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full mr-3 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.5)] border border-slate-700 relative overflow-hidden" 
+                                                        style={{background: `radial-gradient(circle at 30% 30%, ${c.light}, ${c.dark})`}}
+                                                    >
+                                                        <div className="absolute top-[2px] left-[2px] w-[5px] h-[3px] bg-white rounded-full opacity-60 rotate-[-40deg]"></div>
+                                                    </div>
+                                                    <span className="text-left w-8 font-semibold">{atom}</span>
+                                                </div>
+                                            </td>
+                                            <td className={`py-2 text-xl ${colorClass}`}>
+                                                {isBalanced && <i className="fa-solid fa-check text-sm mr-2 text-green-500"></i>}
+                                                {r}
+                                            </td>
+                                            <td className={`py-2 text-xl ${colorClass}`}>
+                                                {isBalanced && <i className="fa-solid fa-check text-sm mr-2 text-green-500"></i>}
+                                                {p}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Action Area & Smart Hint & Skip Buttons */}
+                    <div className="min-h-[120px] flex flex-col items-center justify-start w-full max-w-2xl text-center">
+                        
+                        {hint && displayStatus !== 'correct' && (
+                            <div className={`border px-4 py-3 rounded-xl mb-4 animate-pop w-full ${displayStatus === 'incorrect' ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-blue-500/10 border-blue-500/30 text-blue-300'}`}>
+                                <i className={`fa-solid ${displayStatus === 'incorrect' ? 'fa-circle-exclamation' : 'fa-lightbulb'} mr-2`}></i>
+                                {hint}
+                            </div>
+                        )}
+                        
+                        {displayStatus === 'correct' ? (
+                            <div className="flex flex-col items-center w-full animate-pop">
+                                <p className="text-green-400 text-lg mb-3 font-bold"><i className="fa-solid fa-check-circle mr-1"></i> ยอดเยี่ยม! ดุลสมการถูกต้องแล้ว</p>
+                                
+                                {equation.fact && !isTutorial && (
+                                    <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 px-5 py-4 rounded-xl mb-6 text-sm w-full text-left shadow-lg">
+                                        <p className="font-bold text-blue-400 mb-1"><i className="fa-solid fa-lightbulb mr-2"></i>เกร็ดความรู้:</p>
+                                        {equation.fact}
+                                    </div>
+                                )}
+
+                                {(!customLogic || !customLogic.hideNextButton) && (
+                                    <button onClick={() => { Sound.click(soundEnabled); if(onNext) onNext(); }} className="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-full font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-all transform hover:scale-105">
+                                        ไปข้อถัดไป <i className="fa-solid fa-arrow-right ml-2"></i>
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap gap-4 justify-center items-center mt-2">
+                                {!isTutorial && (
+                                    <button 
+                                        onClick={generateHint} 
+                                        className="px-6 py-2.5 rounded-full font-semibold bg-blue-900/30 text-blue-400 border border-blue-500/50 hover:bg-blue-800/50 transition-colors shadow-lg"
+                                    >
+                                        <i className="fa-solid fa-lightbulb mr-2"></i>คำใบ้
+                                    </button>
+                                )}
+                                
+                                <button 
+                                    onClick={handleVerify} 
+                                    className={`px-10 py-3 rounded-full font-bold text-lg transition-all border shadow-lg ${displayStatus === 'incorrect' ? 'bg-red-900/40 border-red-500/50 text-red-200' : 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.3)]'}`}
+                                >
+                                    ตรวจสอบคำตอบ
+                                </button>
+                                
+                                {!isTutorial && (
+                                    <button 
+                                        onClick={handleSkip} 
+                                        className="px-6 py-2.5 rounded-full font-semibold bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors shadow-lg"
+                                    >
+                                        ข้าม <i className="fa-solid fa-forward-step ml-2"></i>
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Pop-up เฉลย */}
+                    {showAnswerPopup && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-fade-in">
+                            <div className="glass w-full max-w-3xl p-6 md:p-8 rounded-3xl flex flex-col items-center text-center shadow-[0_0_30px_rgba(249,115,22,0.2)] border border-orange-500/30">
+                                <i className="fa-solid fa-book-open text-5xl text-orange-400 mb-4"></i>
+                                <h3 className="text-2xl font-bold text-white mb-2">เฉลยสมการ</h3>
+                                <p className="text-slate-300 mb-6">เพื่อความเข้าใจที่ถูกต้อง นี่คือตัวเลขการดุลสมการที่สมบูรณ์ครับ</p>
+                                
+                                <div className="glass-dark p-5 md:p-6 rounded-2xl w-full flex flex-nowrap overflow-x-auto hide-scroll justify-start md:justify-center items-center text-2xl md:text-3xl font-medium mb-8 whitespace-nowrap">
+                                    {equation.reactants.map((mol, i) => (
+                                        <React.Fragment key={`ans-r-${i}`}>
+                                            <div className="flex items-baseline">
+                                                {equation.ans.r[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{equation.ans.r[i]}</span>}
+                                                <span>{formatFormula(mol.f)}</span>
+                                                {showStateSymbols && <span className="text-sm text-slate-400 ml-1">({mol.s})</span>}
+                                            </div>
+                                            {i < equation.reactants.length - 1 && <span className="mx-3 text-slate-500 font-bold">+</span>}
+                                        </React.Fragment>
+                                    ))}
+                                    <span className="mx-4 md:mx-6 text-orange-500 font-bold">→</span>
+                                    {equation.products.map((mol, i) => (
+                                        <React.Fragment key={`ans-p-${i}`}>
+                                            <div className="flex items-baseline">
+                                                {equation.ans.p[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{equation.ans.p[i]}</span>}
+                                                <span>{formatFormula(mol.f)}</span>
+                                                {showStateSymbols && <span className="text-sm text-slate-400 ml-1">({mol.s})</span>}
+                                            </div>
+                                            {i < equation.products.length - 1 && <span className="mx-3 text-slate-500 font-bold">+</span>}
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+
+                                <button onClick={closePopupAndNext} className="bg-orange-600 hover:bg-orange-500 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-transform transform hover:scale-105 mt-2">
+                                    เข้าใจแล้ว ไปข้อถัดไป <i className="fa-solid fa-arrow-right ml-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const HomeTab = () => (
+            <div className="glass w-full max-w-3xl mx-auto p-8 md:p-12 rounded-3xl animate-fade-in flex flex-col items-center text-center">
+                <h1 className="text-3xl md:text-4xl font-bold text-orange-400 mb-8">หลักการดุลสมการเคมี</h1>
+                
+                <div className="space-y-6 text-slate-300 leading-relaxed text-lg flex flex-col items-center">
+                    <p>
+                        สมการเคมีแสดงการเปลี่ยนแปลงจาก <span className="text-blue-400 font-bold">สารตั้งต้น (Reactants)</span> ไปเป็น <span className="text-green-400 font-bold">ผลิตภัณฑ์ (Products)</span>
+                    </p>
+                    
+                    <div className="my-2">
+                        <div className="text-xl font-bold text-white mb-2">กฎทรงมวล (Law of Conservation of Mass)</div>
+                        <p>"มวลของสารก่อนทำปฏิกิริยา จะต้องเท่ากับมวลของสารหลังทำปฏิกิริยาเสมอ"</p>
+                        <p>นั่นหมายความว่า <span className="text-orange-400 font-bold text-xl">จำนวนอะตอมของแต่ละธาตุฝั่งซ้ายและฝั่งขวาต้องเท่ากัน</span></p>
+                    </div>
+
+                    <div className="mt-8 w-full max-w-2xl glass-dark p-6 md:p-8 rounded-2xl border border-slate-700/50 shadow-lg">
+                        <h3 className="text-xl font-bold text-white mb-4 text-center">ขั้นตอนการดุลสมการ:</h3>
+                        <div className="space-y-3 text-left inline-block w-full">
+                            <p><span className="text-orange-400 font-bold mr-2">1.</span>ทำจำนวนอะตอมของธาตุหลัก (เช่น โลหะ หรือธาตุที่มีในสารเดียว) ให้เท่ากันก่อน</p>
+                            <p><span className="text-orange-400 font-bold mr-2">2.</span>ตามด้วยธาตุรองอื่นๆ</p>
+                            <p><span className="text-orange-400 font-bold mr-2">3.</span>ดุลไฮโดรเจน (H) และ ออกซิเจน (O) เป็นลำดับสุดท้าย</p>
+                            <p className="text-orange-500 font-bold mt-4"><i className="fa-solid fa-triangle-exclamation mr-2"></i>สำคัญ: เปลี่ยนได้เฉพาะตัวเลขหน้าสาร ห้ามเปลี่ยนเลขห้อยของสูตรเคมีเด็ดขาด!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const StepByStepTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
+            const [step, setStep] = useState(0);
+            const [status, setStatus] = useState('idle');
+            const propaneEq = db.find(c => c.category === "การเผาไหม้").equations.find(e => e.id === "cb2");
+            const [tutorialCoeffs, setTutorialCoeffs] = useState({ r: [1, 1], p: [1, 1] });
+
+            const instructions = [
+                <span key="1">ขั้นที่ 1: เริ่มต้นดุลธาตุคาร์บอน (C) โดยปรับตัวเลขหน้า {formatFormula("CO2")} ให้เท่ากับฝั่งซ้าย</span>,
+                <span key="2">ขั้นที่ 2: ถัดมาให้ดุลไฮโดรเจน (H) โดยปรับตัวเลขหน้า {formatFormula("H2O")} ให้เท่ากับฝั่งซ้าย</span>,
+                <span key="3">ขั้นที่ 3: อันดับสุดท้าย ดุลออกซิเจน (O) โดยนับรวมฝั่งขวา แล้วปรับตัวเลขหน้า {formatFormula("O2")} ฝั่งซ้าย</span>,
+                <span key="4" className="text-green-400"><i className="fa-solid fa-star mr-2"></i>สำเร็จ! คุณเข้าใจหลักการดุลสมการเคมีพื้นฐานแล้ว</span>
+            ];
+
+            const handleVerify = (currentCoeffs) => {
+                let isStepCorrect = false;
+                if (step === 0) isStepCorrect = currentCoeffs.p[0] === 3;
+                else if (step === 1) isStepCorrect = currentCoeffs.p[1] === 4;
+                else if (step === 2) isStepCorrect = currentCoeffs.r[1] === 5;
+
+                if (isStepCorrect) {
+                    Sound.success(soundEnabled);
+                    setStatus('correct');
+                    setTimeout(() => {
+                        if (step < 3) {
+                            setStep(s => s + 1);
+                            setStatus('idle');
+                        }
+                    }, 1500);
+                } else {
+                    Sound.error(soundEnabled);
+                    setStatus('incorrect');
+                }
+            };
+
+            return (
+                <div className="w-full flex flex-col items-center animate-fade-in">
+                    <div className="mb-6 text-center">
+                        <h2 className="text-2xl font-bold text-white mb-2">เรียนรู้ทีละขั้น: การเผาไหม้ก๊าซโพรเพน</h2>
+                        <p className="text-slate-400">ทำตามคำแนะนำในกล่องด้านล่างนี้</p>
+                    </div>
+
+                    <div className={`glass-dark border-2 p-4 rounded-xl w-full max-w-4xl mb-6 transition-colors duration-300 ${status === 'correct' ? 'border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]'}`}>
+                        <p className="text-xl text-white font-medium leading-relaxed">{instructions[step]}</p>
+                    </div>
+
+                    <EquationSolver 
+                        equation={propaneEq} 
+                        hideHeader={true}
+                        showStateSymbols={showStateSymbols}
+                        showParticles={showParticles}
+                        onToggleStateSymbols={onToggleStateSymbols}
+                        onToggleParticles={onToggleParticles}
+                        isTutorial={true}
+                        soundEnabled={soundEnabled}
+                        customLogic={{ overrideCoeffs: tutorialCoeffs, onChange: setTutorialCoeffs, onVerify: handleVerify, status: status, setStatus: setStatus, locked: step === 3, hideNextButton: true }}
+                    />
+
+                    {step === 3 && status === 'correct' && (
+                        <button onClick={() => { Sound.click(soundEnabled); setStep(0); setTutorialCoeffs({r:[1,1], p:[1,1]}); setStatus('idle'); }} className="mt-4 px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-full text-white border border-slate-600 transition-colors shadow-lg">
+                            <i className="fa-solid fa-rotate-right mr-2"></i> ลองทำใหม่อีกครั้ง
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        const FreePlayTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
+            const [equation, setEquation] = useState(() => allEquations[Math.floor(Math.random() * allEquations.length)]);
+            const [streak, setStreak] = useState(0);
+            
+            const loadRandom = () => {
+                let next;
+                do { next = allEquations[Math.floor(Math.random() * allEquations.length)]; } while (next.id === equation.id && allEquations.length > 1);
+                setEquation(next);
+            };
+
+            return (
+                <div className="w-full relative">
+                    <div className="flex justify-between items-center max-w-5xl mx-auto mb-6 px-4">
+                        <div className="text-orange-500 font-medium text-lg"><i className="fa-solid fa-dice mr-2"></i>สุ่มโจทย์ท้าทาย</div>
+                        <div className={`glass px-4 py-1.5 rounded-full flex items-center gap-2 font-bold transition-all ${streak > 0 ? 'text-orange-400 border-orange-500/50 shadow-[0_0_10px_rgba(249,115,22,0.3)] animate-pop' : 'text-slate-500 border-slate-700'}`}>
+                            <i className="fa-solid fa-fire-flame-curved"></i> Combo: {streak}
+                        </div>
+                    </div>
+                    <EquationSolver key={equation.id} equation={equation} showStateSymbols={showStateSymbols} showParticles={showParticles} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} soundEnabled={soundEnabled} onSuccessFirstTry={() => setStreak(s => s + 1)} onFail={() => setStreak(0)} onNext={loadRandom} />
+                </div>
+            );
+        };
+
+        const BankTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
+            const [catIdx, setCatIdx] = useState(0);
+            const [eqIdx, setEqIdx] = useState(0);
+
+            const category = db[catIdx];
+            const isFinished = eqIdx >= category.equations.length;
+
+            const handleNext = () => setEqIdx(i => i + 1);
+
+            return (
+                <div className="w-full max-w-5xl mx-auto">
+                    <div className="glass p-5 md:p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between mb-8 shadow-md max-w-4xl mx-auto">
+                        <span className="text-slate-300 font-medium text-lg mb-3 md:mb-0">
+                            <i className="fa-solid fa-layer-group mr-2 text-orange-400"></i>เลือกหมวดหมู่ปฏิกิริยา:
+                        </span>
+                        <div className="relative w-full md:w-64">
+                            <select 
+                                className="w-full appearance-none bg-[#1e293b] border border-slate-600 text-white px-5 py-3 rounded-xl outline-none focus:border-orange-500 cursor-pointer transition-all shadow-sm text-base font-medium"
+                                value={catIdx} onChange={(e) => { Sound.click(soundEnabled); setCatIdx(Number(e.target.value)); setEqIdx(0); }}
+                            >
+                                {db.map((cat, i) => <option key={i} value={i} className="bg-slate-800">{cat.category}</option>)}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-300">
+                                <i className="fa-solid fa-chevron-down text-sm"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    {isFinished ? (
+                        <div className="text-center mt-20 animate-fade-in glass p-12 rounded-3xl border border-green-500/30 max-w-4xl mx-auto">
+                            <i className="fa-solid fa-medal text-6xl text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)]"></i>
+                            <h2 className="text-3xl font-bold mb-2">ยินดีด้วย ผู้พิทักษ์กฎทรงมวล!</h2>
+                            <p className="text-slate-300 mb-6">คุณทำโจทย์หมวด "{category.category}" สำเร็จครบทุกข้อแล้ว</p>
+                            <button onClick={() => { Sound.click(soundEnabled); setEqIdx(0); }} className="px-6 py-2 bg-[#1e293b] border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors shadow-lg">
+                                <i className="fa-solid fa-rotate-left mr-2"></i> ทำหมวดนี้อีกครั้ง
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
+                            <div className="text-center text-slate-400 mb-4 font-medium">ข้อที่ <span className="text-orange-400">{eqIdx + 1}</span> / {category.equations.length}</div>
+                            <EquationSolver key={`${catIdx}-${eqIdx}`} equation={{...category.equations[eqIdx], categoryName: category.category}} showStateSymbols={showStateSymbols} showParticles={showParticles} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} soundEnabled={soundEnabled} onNext={handleNext} />
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // 3. Main App Container
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('home');
+            const [showStateSymbols, setShowStateSymbols] = useState(true);
+            const [showParticles, setShowParticles] = useState(false);
+            const [soundEnabled, setSoundEnabled] = useState(true); // สถานะเปิด-ปิดเสียง
+
+            const handleTabSwitch = (tab) => {
+                Sound.click(soundEnabled);
+                setActiveTab(tab);
+            };
+
+            const renderTab = () => {
+                const props = { 
+                    showStateSymbols, 
+                    onToggleStateSymbols: () => { Sound.click(soundEnabled); setShowStateSymbols(!showStateSymbols); },
+                    showParticles, 
+                    onToggleParticles: () => { Sound.click(soundEnabled); setShowParticles(!showParticles); },
+                    soundEnabled
+                };
+                switch(activeTab) {
+                    case 'home': return <HomeTab />;
+                    case 'step': return <StepByStepTab {...props} />;
+                    case 'free': return <FreePlayTab {...props} />;
+                    case 'bank': return <BankTab {...props} />;
+                    default: return <HomeTab />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col p-4 md:p-8">
+                    <nav className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row justify-between items-center mb-10 gap-6 glass px-6 md:px-8 py-4 rounded-2xl">
+                        <div className="text-2xl font-bold tracking-wider text-white drop-shadow-md">
+                            Phatthana <span className="text-orange-500">Lab</span>
+                        </div>
+                        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 text-sm md:text-base font-medium">
+                            <button onClick={() => handleTabSwitch('home')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'home' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>หน้าแรก</button>
+                            <button onClick={() => handleTabSwitch('step')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'step' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>เรียนทีละขั้น</button>
+                            <button onClick={() => handleTabSwitch('free')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'free' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>เล่นอิสระ</button>
+                            <button onClick={() => handleTabSwitch('bank')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'bank' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>คลังโจทย์</button>
+                            
+                            {/* ปุ่มเปิด-ปิดเสียง (Toggle Sound) */}
+                            <div className="h-6 w-px bg-slate-700 mx-2 hidden md:block"></div>
+                            <button 
+                                onClick={() => { Sound.click(!soundEnabled); setSoundEnabled(!soundEnabled); }} 
+                                className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${soundEnabled ? 'text-green-400 bg-slate-800 hover:bg-slate-700' : 'text-slate-500 bg-slate-800/50 hover:bg-slate-800'}`}
+                                title={soundEnabled ? "ปิดเสียง" : "เปิดเสียง"}
+                            >
+                                <i className={`fa-solid ${soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}`}></i>
+                            </button>
+                        </div>
+                    </nav>
+                    <main className="flex-grow w-full overflow-hidden">
+                        {renderTab()}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
