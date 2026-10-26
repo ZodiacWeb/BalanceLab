@@ -78,10 +78,6 @@
         
         .no-select { user-select: none; }
 
-        .hide-scroll::-webkit-scrollbar { height: 6px; }
-        .hide-scroll::-webkit-scrollbar-track { background: transparent; }
-        .hide-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-
         /* Animations */
         .scale-unbalanced { transform: rotate(-15deg); transition: transform 0.4s ease; color: #ef4444; }
         .scale-balanced { transform: rotate(0deg); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); color: #22c55e; }
@@ -97,7 +93,48 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } = React;
+
+        // --- COMPONENT: Auto Scale to Fit (ป้องกัน Infinite Loop) ---
+        const ScaleToFit = ({ children, className = "justify-center" }) => {
+            const containerRef = useRef(null);
+            const contentRef = useRef(null);
+            const [scale, setScale] = useState(1);
+
+            const updateScale = useCallback(() => {
+                if (containerRef.current && contentRef.current) {
+                    const containerWidth = containerRef.current.offsetWidth;
+                    const contentWidth = contentRef.current.scrollWidth;
+                    if (contentWidth > containerWidth && contentWidth > 0) {
+                        const newScale = Number((containerWidth / contentWidth).toFixed(3));
+                        setScale(prev => Math.abs(prev - newScale) > 0.01 ? newScale : prev);
+                    } else {
+                        setScale(prev => prev !== 1 ? 1 : prev);
+                    }
+                }
+            }, []);
+
+            useLayoutEffect(() => {
+                updateScale();
+                window.addEventListener('resize', updateScale);
+                const observer = new MutationObserver(updateScale);
+                if (contentRef.current) {
+                    observer.observe(contentRef.current, { subtree: true, childList: true, characterData: true });
+                }
+                return () => {
+                    window.removeEventListener('resize', updateScale);
+                    observer.disconnect();
+                };
+            }, [updateScale, children]);
+
+            return (
+                <div ref={containerRef} className={`w-full flex overflow-hidden ${className}`}>
+                    <div ref={contentRef} style={{ transform: `scale(${scale})`, transformOrigin: className.includes('justify-start') ? 'left center' : 'center center', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center' }}>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
 
         // --- AUDIO SYSTEM (Web Audio API) ---
         const Sound = {
@@ -121,11 +158,10 @@
             },
             click(enabled) {
                 if (!enabled) return;
-                this.play(600, 'sine', 0.05, 0.05); // เสียง Tick สั้นๆ
+                this.play(600, 'sine', 0.05, 0.05);
             },
             success(enabled) {
                 if (!enabled) return;
-                // เสียง Chime (C5, E5, G5, C6)
                 this.play(523.25, 'sine', 0.1, 0.1, 0);
                 this.play(659.25, 'sine', 0.1, 0.1, 0.1);
                 this.play(783.99, 'sine', 0.1, 0.1, 0.2);
@@ -133,7 +169,6 @@
             },
             error(enabled) {
                 if (!enabled) return;
-                // เสียง Buzzer ต่ำๆ
                 this.play(250, 'square', 0.15, 0.03, 0);
                 this.play(200, 'square', 0.25, 0.03, 0.15);
             }
@@ -335,71 +370,71 @@
                 equations: [
                     { id: "c1", name: "การเกิดน้ำ", fact: "น้ำครอบคลุมพื้นผิวโลกกว่า 71% และเป็นสิ่งสำคัญที่สุดต่อสิ่งมีชีวิต", reactants: [{f: "H2", s: "g", atoms: {H:2}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [2, 1], p: [2] } },
                     { id: "c2", name: "การสังเคราะห์แอมโมเนีย", fact: "กระบวนการนี้เรียกว่า Haber process เป็นแหล่งผลิตปุ๋ยเคมีที่สำคัญที่สุดของโลก!", reactants: [{f: "N2", s: "g", atoms: {N:2}}, {f: "H2", s: "g", atoms: {H:2}}], products: [{f: "NH3", s: "g", atoms: {N:1, H:3}}], ans: { r: [1, 3], p: [2] } },
-                    { id: "c3", name: "การเกิดคาร์บอนไดออกไซด์", fact: "คาร์บอนไดออกไซด์เป็นก๊าซเรือนกระจกที่เกิดจากการเผาไหม้แบบสมบูรณ์", reactants: [{f: "C", s: "s", atoms: {C:1}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}], ans: { r: [1, 1], p: [1] } }
+                    { id: "c3", name: "การเกิดคาร์บอนไดออกไซด์", fact: "คาร์บอนไดออกไซด์เป็นก๊าซเรือนกระจกหลักที่เกิดจากการเผาไหม้แบบสมบูรณ์", reactants: [{f: "C", s: "s", atoms: {C:1}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}], ans: { r: [1, 1], p: [1] } }
                 ]
             },
             {
                 category: "การแยกสลาย",
                 equations: [
-                    { id: "d1", name: "การแยกสลายน้ำยาล้างแผล", fact: "น้ำยาล้างแผลสลายตัวให้ก๊าซออกซิเจน ซึ่งทำให้เกิดฟองฟู่และช่วยฆ่าเชื้อโรคได้", reactants: [{f: "H2O2", s: "aq", atoms: {H:2, O:2}}], products: [{f: "H2O", s: "l", atoms: {H:2, O:1}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [2], p: [2, 1] } },
-                    { id: "d2", name: "การสลายตัวของด่างทับทิม", reactants: [{f: "KClO3", s: "s", atoms: {K:1, Cl:1, O:3}}], products: [{f: "KCl", s: "s", atoms: {K:1, Cl:1}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [2], p: [2, 3] } },
-                    { id: "d3", name: "การเผาหินปูน", reactants: [{f: "CaCO3", s: "s", atoms: {Ca:1, C:1, O:3}}], products: [{f: "CaO", s: "s", atoms: {Ca:1, O:1}}, {f: "CO2", s: "g", atoms: {C:1, O:2}}], ans: { r: [1], p: [1, 1] } }
+                    { id: "d1", name: "การแยกสลายน้ำยาล้างแผล", fact: "น้ำยาล้างแผล (H2O2) สลายตัวให้ก๊าซออกซิเจน ซึ่งทำให้เกิดฟองฟู่และช่วยฆ่าเชื้อโรคได้", reactants: [{f: "H2O2", s: "aq", atoms: {H:2, O:2}}], products: [{f: "H2O", s: "l", atoms: {H:2, O:1}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [2], p: [2, 1] } },
+                    { id: "d2", name: "การสลายตัวของด่างทับทิม", fact: "ใช้ในห้องปฏิบัติการเพื่อเตรียมก๊าซออกซิเจนบริสุทธิ์ หรือใช้เป็นส่วนผสมในหัวไม้ขีดไฟบางชนิด", reactants: [{f: "KClO3", s: "s", atoms: {K:1, Cl:1, O:3}}], products: [{f: "KCl", s: "s", atoms: {K:1, Cl:1}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [2], p: [2, 3] } },
+                    { id: "d3", name: "การเผาหินปูน", fact: "การเผาหินปูนให้ความร้อนสูงเป็นกระบวนการสำคัญตั้งต้นในการผลิตปูนซีเมนต์ก่อสร้าง", reactants: [{f: "CaCO3", s: "s", atoms: {Ca:1, C:1, O:3}}], products: [{f: "CaO", s: "s", atoms: {Ca:1, O:1}}, {f: "CO2", s: "g", atoms: {C:1, O:2}}], ans: { r: [1], p: [1, 1] } }
                 ]
             },
             {
                 category: "การแทนที่",
                 equations: [
-                    { id: "r1", name: "สังกะสีทำปฏิกิริยากับกรด", fact: "ก๊าซไฮโดรเจนที่เกิดขึ้นจะติดไฟและเกิดเสียง 'ป๊อป' เมื่อทดสอบด้วยเปลวไฟ!", reactants: [{f: "Zn", s: "s", atoms: {Zn:1}}, {f: "HCl", s: "aq", atoms: {H:1, Cl:1}}], products: [{f: "ZnCl2", s: "aq", atoms: {Zn:1, Cl:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
-                    { id: "r2", name: "เหล็กกับจุนสี", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "CuSO4", s: "aq", atoms: {Cu:1, S:1, O:4}}], products: [{f: "FeSO4", s: "aq", atoms: {Fe:1, S:1, O:4}}, {f: "Cu", s: "s", atoms: {Cu:1}}], ans: { r: [1, 1], p: [1, 1] } },
-                    { id: "r3", name: "แมกนีเซียมกับซิลเวอร์ไนเตรต", reactants: [{f: "Mg", s: "s", atoms: {Mg:1}}, {f: "AgNO3", s: "aq", atoms: {Ag:1, N:1, O:3}}], products: [{f: "Mg(NO3)2", s: "aq", atoms: {Mg:1, N:2, O:6}}, {f: "Ag", s: "s", atoms: {Ag:1}}], ans: { r: [1, 2], p: [1, 2] } }
+                    { id: "r1", name: "สังกะสีทำปฏิกิริยากับกรด", fact: "ก๊าซไฮโดรเจนที่เกิดขึ้นจะติดไฟและเกิดเสียง 'ป๊อป' เมื่อทดสอบด้วยเปลวไฟ นิยมใช้สาธิตในห้องเรียน", reactants: [{f: "Zn", s: "s", atoms: {Zn:1}}, {f: "HCl", s: "aq", atoms: {H:1, Cl:1}}], products: [{f: "ZnCl2", s: "aq", atoms: {Zn:1, Cl:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
+                    { id: "r2", name: "เหล็กกับจุนสี", fact: "นี่คือปฏิกิริยาการแทนที่เดี่ยว เหล็กมีความไวต่อปฏิกิริยามากกว่าทองแดงจึงเข้าไปแทนที่ในสารละลาย", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "CuSO4", s: "aq", atoms: {Cu:1, S:1, O:4}}], products: [{f: "FeSO4", s: "aq", atoms: {Fe:1, S:1, O:4}}, {f: "Cu", s: "s", atoms: {Cu:1}}], ans: { r: [1, 1], p: [1, 1] } },
+                    { id: "r3", name: "แมกนีเซียมกับซิลเวอร์ไนเตรต", fact: "แมกนีเซียมสามารถไล่เงินออกจากสารละลายซิลเวอร์ไนเตรตได้ ทำให้เกิดเกล็ดเงินบริสุทธิ์เกาะอยู่", reactants: [{f: "Mg", s: "s", atoms: {Mg:1}}, {f: "AgNO3", s: "aq", atoms: {Ag:1, N:1, O:3}}], products: [{f: "Mg(NO3)2", s: "aq", atoms: {Mg:1, N:2, O:6}}, {f: "Ag", s: "s", atoms: {Ag:1}}], ans: { r: [1, 2], p: [1, 2] } }
                 ]
             },
             {
                 category: "กรดกับเบส",
                 equations: [
-                    { id: "ab1", name: "การเกิดเกลือแกง (สะเทิน)", fact: "ปฏิกิริยาสะเทินระหว่างกรดแก่และเบสแก่ จะได้เกลือแกง (NaCl) และน้ำเสมอ", reactants: [{f: "HCl", s: "aq", atoms: {H:1, Cl:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}], products: [{f: "NaCl", s: "aq", atoms: {Na:1, Cl:1}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [1, 1], p: [1, 1] } },
-                    { id: "ab2", name: "กรดซัลฟิวริกกับด่างคลี", reactants: [{f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}, {f: "KOH", s: "aq", atoms: {K:1, O:1, H:1}}], products: [{f: "K2SO4", s: "aq", atoms: {K:2, S:1, O:4}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [1, 2], p: [1, 2] } }
+                    { id: "ab1", name: "การเกิดเกลือแกง (สะเทิน)", fact: "ปฏิกิริยาสะเทินระหว่างกรดแก่และเบสแก่ จะได้เกลือแกง (NaCl) ที่เราทานได้ และน้ำเสมอ", reactants: [{f: "HCl", s: "aq", atoms: {H:1, Cl:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}], products: [{f: "NaCl", s: "aq", atoms: {Na:1, Cl:1}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [1, 1], p: [1, 1] } },
+                    { id: "ab2", name: "กรดซัลฟิวริกกับด่างคลี", fact: "ปฏิกิริยาสะเทินนี้ให้เกลือโพแทสเซียมซัลเฟต ซึ่งนำไปใช้ทำปุ๋ยโพแทสเซียมเร่งผลผลิตพืชได้ดี", reactants: [{f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}, {f: "KOH", s: "aq", atoms: {K:1, O:1, H:1}}], products: [{f: "K2SO4", s: "aq", atoms: {K:2, S:1, O:4}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], ans: { r: [1, 2], p: [1, 2] } }
                 ]
             },
             {
                 category: "กรดกับโลหะ",
                 equations: [
-                    { id: "am1", name: "แมกนีเซียมกับกรดเกลือ", reactants: [{f: "Mg", s: "s", atoms: {Mg:1}}, {f: "HCl", s: "aq", atoms: {H:1, Cl:1}}], products: [{f: "MgCl2", s: "aq", atoms: {Mg:1, Cl:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
-                    { id: "am2", name: "อะลูมิเนียมกับกรดซัลฟิวริก", reactants: [{f: "Al", s: "s", atoms: {Al:1}}, {f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}], products: [{f: "Al2(SO4)3", s: "aq", atoms: {Al:2, S:3, O:12}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [2, 3], p: [1, 3] } }
+                    { id: "am1", name: "แมกนีเซียมกับกรดเกลือ", fact: "ปฏิกิริยานี้ให้ก๊าซไฮโดรเจนและเกลือแมกนีเซียมคลอไรด์ เป็นการทดสอบคุณสมบัติของกรดพื้นฐาน", reactants: [{f: "Mg", s: "s", atoms: {Mg:1}}, {f: "HCl", s: "aq", atoms: {H:1, Cl:1}}], products: [{f: "MgCl2", s: "aq", atoms: {Mg:1, Cl:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
+                    { id: "am2", name: "อะลูมิเนียมกับกรดซัลฟิวริก", fact: "โลหะส่วนใหญ่เมื่อเจอกรดจะถูกกัดกร่อน นี่เป็นเหตุผลที่เราไม่ควรใช้ภาชนะโลหะบรรจุน้ำส้มสายชู", reactants: [{f: "Al", s: "s", atoms: {Al:1}}, {f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}], products: [{f: "Al2(SO4)3", s: "aq", atoms: {Al:2, S:3, O:12}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [2, 3], p: [1, 3] } }
                 ]
             },
             {
                 category: "เบสกับโลหะ",
                 equations: [
-                    { id: "bm1", name: "สังกะสีกับโซเดียมไฮดรอกไซด์", reactants: [{f: "Zn", s: "s", atoms: {Zn:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}], products: [{f: "Na2ZnO2", s: "aq", atoms: {Na:2, Zn:1, O:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
-                    { id: "bm2", name: "อะลูมิเนียมกับเบส", reactants: [{f: "Al", s: "s", atoms: {Al:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "NaAlO2", s: "aq", atoms: {Na:1, Al:1, O:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [2, 2, 2], p: [2, 3] } }
+                    { id: "bm1", name: "สังกะสีกับโซเดียมไฮดรอกไซด์", fact: "สังกะสีเป็นโลหะพิเศษ (Amphoteric) ที่ทำปฏิกิริยาได้ทั้งกับกรดและเบส โดยให้ก๊าซไฮโดรเจนทั้งคู่", reactants: [{f: "Zn", s: "s", atoms: {Zn:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}], products: [{f: "Na2ZnO2", s: "aq", atoms: {Na:2, Zn:1, O:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [1, 2], p: [1, 1] } },
+                    { id: "bm2", name: "อะลูมิเนียมกับเบส", fact: "ปฏิกิริยาที่อะลูมิเนียมเจอกับเบสแล้วเกิดฟองไฮโดรเจน นิยมใช้ประยุกต์เป็นส่วนผสมในผงทะลวงท่ออุดตัน", reactants: [{f: "Al", s: "s", atoms: {Al:1}}, {f: "NaOH", s: "aq", atoms: {Na:1, O:1, H:1}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "NaAlO2", s: "aq", atoms: {Na:1, Al:1, O:2}}, {f: "H2", s: "g", atoms: {H:2}}], ans: { r: [2, 2, 2], p: [2, 3] } }
                 ]
             },
             {
                 category: "การเกิดสนิมเหล็ก",
                 equations: [
-                    { id: "ru1", name: "สนิมเหล็กพื้นฐาน", fact: "สนิมเหล็กทำให้โครงสร้างเหล็กผุกร่อนและอ่อนแอลง การทาสีหรือเคลือบน้ำมันช่วยป้องกันได้", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "Fe2O3", s: "s", atoms: {Fe:2, O:3}}], ans: { r: [4, 3], p: [2] } },
-                    { id: "ru2", name: "สนิมเหล็ก (มีน้ำ)", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "O2", s: "g", atoms: {O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "Fe(OH)3", s: "s", atoms: {Fe:1, O:3, H:3}}], ans: { r: [4, 3, 6], p: [4] } }
+                    { id: "ru1", name: "สนิมเหล็กพื้นฐาน", fact: "สนิมเหล็กทำให้โครงสร้างเหล็กผุกร่อนและอ่อนแอลง การทาสี เคลือบน้ำมัน หรือรมดำช่วยป้องกันได้", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "Fe2O3", s: "s", atoms: {Fe:2, O:3}}], ans: { r: [4, 3], p: [2] } },
+                    { id: "ru2", name: "สนิมเหล็ก (มีน้ำ)", fact: "การเกิดสนิมเหล็กในโลกความจริงต้องอาศัยทั้งความชื้น (น้ำ) และออกซิเจนพร้อมกัน ขาดอย่างใดอย่างหนึ่งจะไม่เกิดสนิม", reactants: [{f: "Fe", s: "s", atoms: {Fe:1}}, {f: "O2", s: "g", atoms: {O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "Fe(OH)3", s: "s", atoms: {Fe:1, O:3, H:3}}], ans: { r: [4, 3, 6], p: [4] } }
                 ]
             },
             {
                 category: "การเผาไหม้",
                 equations: [
-                    { id: "cb1", name: "การเผาไหม้ก๊าซมีเทน", reactants: [{f: "CH4", s: "g", atoms: {C:1, H:4}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "g", atoms: {H:2, O:1}}], ans: { r: [1, 2], p: [1, 2] } },
+                    { id: "cb1", name: "การเผาไหม้ก๊าซมีเทน", fact: "ก๊าซมีเทนคือองค์ประกอบหลักในก๊าซธรรมชาติ (NGV) และก๊าซชีวภาพ การเผาไหม้ให้ความร้อนสูงและสะอาด", reactants: [{f: "CH4", s: "g", atoms: {C:1, H:4}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "g", atoms: {H:2, O:1}}], ans: { r: [1, 2], p: [1, 2] } },
                     { id: "cb2", name: "การเผาไหม้ก๊าซโพรเพน", fact: "โพรเพนคือส่วนประกอบหลักในก๊าซหุงต้ม (LPG) ที่เราใช้ทำอาหารในบ้านนั่นเอง!", reactants: [{f: "C3H8", s: "g", atoms: {C:3, H:8}}, {f: "O2", s: "g", atoms: {O:2}}], products: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "g", atoms: {H:2, O:1}}], ans: { r: [1, 5], p: [3, 4] } }
                 ]
             },
             {
                 category: "การเกิดฝนกรด",
                 equations: [
-                    { id: "ar1", name: "ก๊าซซัลเฟอร์ไตรออกไซด์", fact: "ก๊าซซัลเฟอร์ไตรออกไซด์มักเกิดจากการเผาไหม้ถ่านหินในโรงงาน และเป็นตัวการหลักของฝนกรด", reactants: [{f: "SO3", s: "g", atoms: {S:1, O:3}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}], ans: { r: [1, 1], p: [1] } },
-                    { id: "ar2", name: "ก๊าซไนโตรเจนไดออกไซด์", reactants: [{f: "NO2", s: "g", atoms: {N:1, O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "HNO3", s: "aq", atoms: {H:1, N:1, O:3}}, {f: "NO", s: "g", atoms: {N:1, O:1}}], ans: { r: [3, 1], p: [2, 1] } }
+                    { id: "ar1", name: "ก๊าซซัลเฟอร์ไตรออกไซด์", fact: "ก๊าซนี้มักเกิดจากการเผาไหม้ถ่านหินในโรงงานอุตสาหกรรม เมื่อละลายกับฝนจะกลายเป็นกรดซัลฟิวริก (ฝนกรด)", reactants: [{f: "SO3", s: "g", atoms: {S:1, O:3}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "H2SO4", s: "aq", atoms: {H:2, S:1, O:4}}], ans: { r: [1, 1], p: [1] } },
+                    { id: "ar2", name: "ก๊าซไนโตรเจนไดออกไซด์", fact: "ไอเสียจากรถยนต์ทำให้เกิดก๊าซนี้ ซึ่งเมื่อละลายน้ำฝนจะกลายเป็นกรดไนตริก ทำลายสิ่งก่อสร้างและแหล่งน้ำ", reactants: [{f: "NO2", s: "g", atoms: {N:1, O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "HNO3", s: "aq", atoms: {H:1, N:1, O:3}}, {f: "NO", s: "g", atoms: {N:1, O:1}}], ans: { r: [3, 1], p: [2, 1] } }
                 ]
             },
             {
                 category: "การสังเคราะห์แสง",
                 equations: [
-                    { id: "ph1", name: "กระบวนการสังเคราะห์ด้วยแสง", fact: "นี่คือปฏิกิริยาที่สำคัญที่สุดของพืช! เปลี่ยนพลังงานแสงให้เป็นน้ำตาลเพื่อเป็นอาหาร", reactants: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "C6H12O6", s: "aq", atoms: {C:6, H:12, O:6}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [6, 6], p: [1, 6] } }
+                    { id: "ph1", name: "กระบวนการสังเคราะห์ด้วยแสง", fact: "นี่คือปฏิกิริยาที่สำคัญที่สุดของพืช! เปลี่ยนพลังงานแสงและก๊าซเสียให้กลายเป็นน้ำตาลและออกซิเจนที่เราใช้หายใจ", reactants: [{f: "CO2", s: "g", atoms: {C:1, O:2}}, {f: "H2O", s: "l", atoms: {H:2, O:1}}], products: [{f: "C6H12O6", s: "aq", atoms: {C:6, H:12, O:6}}, {f: "O2", s: "g", atoms: {O:2}}], ans: { r: [6, 6], p: [1, 6] } }
                 ]
             }
         ];
@@ -440,7 +475,7 @@
             const adjustCoeff = (side, index, delta) => {
                 if (status === 'correct' || (customLogic && customLogic.locked)) return;
                 
-                Sound.click(soundEnabled); // Play click sound
+                Sound.click(soundEnabled);
                 
                 setCoeffs(prev => {
                     const newSide = [...prev[side]];
@@ -483,12 +518,12 @@
                     setAttempts(a => a + 1);
 
                     if (isCorrect) {
-                        Sound.success(soundEnabled); // Play success sound
+                        Sound.success(soundEnabled);
                         setStatus('correct');
                         setHint(''); 
                         if (attempts === 0 && onSuccessFirstTry && !isTutorial) onSuccessFirstTry();
                     } else {
-                        Sound.error(soundEnabled); // Play error sound
+                        Sound.error(soundEnabled);
                         setStatus('incorrect');
                         if (onFail && !isTutorial) onFail(); 
                         generateHint();
@@ -532,7 +567,7 @@
                     if (showStateSymbols) html.push(<span key={`sr-${i}`} className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>);
                     if (i < equation.reactants.length - 1) html.push(<span key={`pr-${i}`} className="mx-3 text-slate-500 font-bold">+</span>);
                 });
-                html.push(<span key="arrow" className="mx-6 text-orange-500 font-bold">→</span>);
+                html.push(<span key="arrow" className="mx-4 md:mx-6 text-orange-500 font-bold">→</span>);
                 equation.products.forEach((mol, i) => {
                     if (coeffs.p[i] > 1) html.push(<span key={`cp-${i}`} className="text-orange-500 mr-2 font-bold">{coeffs.p[i]}</span>);
                     html.push(<span key={`mp-${i}`}>{formatFormula(mol.f)}</span>);
@@ -542,6 +577,7 @@
                 return html;
             };
 
+            // กู้คืนฟังก์ชัน renderParticleEquation ที่หายไป (ตัวการที่ทำให้เปิดโมเดลแล้วจอค้าง)
             const renderParticleEquation = () => {
                 return (
                     <div className="flex flex-wrap items-center justify-center w-full px-2 mt-4 gap-y-12">
@@ -550,13 +586,13 @@
                                 <React.Fragment key={`pr-${i}`}>
                                     <div className="relative flex justify-center items-center">
                                         <div className="flex flex-wrap justify-center items-center max-w-[280px] gap-2">
-                                            {Array.from({length: Math.min(coeffs.r[i], 12)}).map((_, c) => 
+                                            {Array.from({length: Math.min(coeffs.r[i] || 1, 12)}).map((_, c) => 
                                                 <MoleculeSVG key={c} formula={mol.f} atomsObj={mol.atoms} />
                                             )}
                                         </div>
-                                        {coeffs.r[i] > 12 && (
+                                        {(coeffs.r[i] || 1) > 12 && (
                                             <div className="absolute -bottom-7 w-full text-center">
-                                                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">+ {coeffs.r[i] - 12}</span>
+                                                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">+ {(coeffs.r[i] || 1) - 12}</span>
                                             </div>
                                         )}
                                     </div>
@@ -572,13 +608,13 @@
                                 <React.Fragment key={`pp-${i}`}>
                                     <div className="relative flex justify-center items-center">
                                         <div className="flex flex-wrap justify-center items-center max-w-[280px] gap-2">
-                                            {Array.from({length: Math.min(coeffs.p[i], 12)}).map((_, c) => 
+                                            {Array.from({length: Math.min(coeffs.p[i] || 1, 12)}).map((_, c) => 
                                                 <MoleculeSVG key={c} formula={mol.f} atomsObj={mol.atoms} />
                                             )}
                                         </div>
-                                        {coeffs.p[i] > 12 && (
+                                        {(coeffs.p[i] || 1) > 12 && (
                                             <div className="absolute -bottom-7 w-full text-center">
-                                                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">+ {coeffs.p[i] - 12}</span>
+                                                <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-full">+ {(coeffs.p[i] || 1) - 12}</span>
                                             </div>
                                         )}
                                     </div>
@@ -603,7 +639,7 @@
                     )}
 
                     {/* Box 1: สมการตอนนี้ */}
-                    <div className="glass-dark w-full p-4 md:p-6 rounded-2xl flex flex-col border border-slate-700/50 shadow-md">
+                    <div id="eq-display" className="glass-dark w-full p-4 md:p-6 rounded-2xl flex flex-col border border-slate-700/50 shadow-md">
                         <div className="flex justify-between items-center w-full mb-3 border-b border-slate-700/30 pb-3">
                             <div className="text-orange-400 text-lg font-semibold flex items-center">
                                 <i className="fa-solid fa-flask mr-2 text-xl"></i>สมการตอนนี้
@@ -613,8 +649,13 @@
                                 <span>{isCurrentlyBalanced ? 'สมดุลแล้ว' : 'ยังไม่สมดุล'}</span>
                             </div>
                         </div>
-                        <div className="flex flex-wrap items-center justify-center text-3xl md:text-4xl font-medium pt-3 pb-1 gap-y-4 text-center w-full tracking-wide">
-                            {renderCurrentEq()}
+                        
+                        <div className="w-full flex items-center justify-center pt-3 pb-3">
+                            <ScaleToFit>
+                                <div className="flex items-center text-3xl md:text-4xl font-medium tracking-wide">
+                                    {renderCurrentEq()}
+                                </div>
+                            </ScaleToFit>
                         </div>
                     </div>
 
@@ -649,50 +690,54 @@
                             </div>
                         </div>
                         
-                        <div className="flex flex-wrap items-start justify-center pb-4 pt-2 gap-y-10 gap-x-2 w-full">
-                            {equation.reactants.map((mol, i) => (
-                                <React.Fragment key={`r-${i}`}>
-                                    <div className="flex flex-col items-center min-w-max mx-2">
-                                        <div className="flex items-center">
-                                            <div className="flex flex-col items-center no-select mr-3">
-                                                <button className="btn-control" onClick={() => adjustCoeff('r', i, 1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-up"></i></button>
-                                                <div className={`coeff-box w-12 h-14 rounded-xl flex items-center justify-center text-2xl font-bold ${coeffs.r[i] > 1 ? 'active' : ''}`}>
-                                                    {coeffs.r[i]}
+                        <div className="w-full flex justify-center pb-4 pt-2">
+                            <ScaleToFit>
+                                <div className="flex items-start justify-center gap-2 md:gap-4 px-2">
+                                    {equation.reactants.map((mol, i) => (
+                                        <React.Fragment key={`r-${i}`}>
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center">
+                                                    <div className="flex flex-col items-center no-select mr-2 md:mr-3">
+                                                        <button id={`btn-up-r-${i}`} className="btn-control !py-1 !px-2 md:!py-1 md:!px-3" onClick={() => adjustCoeff('r', i, 1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-up pointer-events-none"></i></button>
+                                                        <div className={`coeff-box w-10 h-12 md:w-12 md:h-14 rounded-lg md:rounded-xl flex items-center justify-center text-xl md:text-2xl font-bold ${coeffs.r[i] > 1 ? 'active' : ''}`}>
+                                                            {coeffs.r[i]}
+                                                        </div>
+                                                        <button id={`btn-down-r-${i}`} className="btn-control !py-1 !px-2 md:!py-1 md:!px-3" onClick={() => adjustCoeff('r', i, -1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-down pointer-events-none"></i></button>
+                                                    </div>
+                                                    <div className="text-2xl md:text-3xl font-medium flex items-baseline gap-1">
+                                                        {formatFormula(mol.f)} 
+                                                        {showStateSymbols && <span className="text-sm text-slate-500 font-light ml-1">({mol.s})</span>}
+                                                    </div>
                                                 </div>
-                                                <button className="btn-control" onClick={() => adjustCoeff('r', i, -1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-down"></i></button>
                                             </div>
-                                            <div className="text-2xl md:text-3xl font-medium flex items-baseline gap-1">
-                                                {formatFormula(mol.f)} 
-                                                {showStateSymbols && <span className="text-sm text-slate-500 font-light ml-1">({mol.s})</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {i < equation.reactants.length - 1 && <div className="text-slate-500 text-3xl mx-1 md:mx-3 self-center mt-2">+</div>}
-                                </React.Fragment>
-                            ))}
+                                            {i < equation.reactants.length - 1 && <div className="text-slate-500 text-3xl mx-1 md:mx-2 self-center mt-2">+</div>}
+                                        </React.Fragment>
+                                    ))}
 
-                            <div className="text-orange-500 text-3xl mx-2 md:mx-4 self-center mt-2 w-full text-center md:w-auto">→</div>
+                                    <div className="text-orange-500 text-3xl mx-2 md:mx-4 self-center mt-2">→</div>
 
-                            {equation.products.map((mol, i) => (
-                                <React.Fragment key={`p-${i}`}>
-                                    <div className="flex flex-col items-center min-w-max mx-2">
-                                        <div className="flex items-center">
-                                            <div className="flex flex-col items-center no-select mr-3">
-                                                <button className="btn-control" onClick={() => adjustCoeff('p', i, 1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-up"></i></button>
-                                                <div className={`coeff-box w-12 h-14 rounded-xl flex items-center justify-center text-2xl font-bold ${coeffs.p[i] > 1 ? 'active' : ''}`}>
-                                                    {coeffs.p[i]}
+                                    {equation.products.map((mol, i) => (
+                                        <React.Fragment key={`p-${i}`}>
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center">
+                                                    <div className="flex flex-col items-center no-select mr-2 md:mr-3">
+                                                        <button id={`btn-up-p-${i}`} className="btn-control !py-1 !px-2 md:!py-1 md:!px-3" onClick={() => adjustCoeff('p', i, 1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-up pointer-events-none"></i></button>
+                                                        <div className={`coeff-box w-10 h-12 md:w-12 md:h-14 rounded-lg md:rounded-xl flex items-center justify-center text-xl md:text-2xl font-bold ${coeffs.p[i] > 1 ? 'active' : ''}`}>
+                                                            {coeffs.p[i]}
+                                                        </div>
+                                                        <button id={`btn-down-p-${i}`} className="btn-control !py-1 !px-2 md:!py-1 md:!px-3" onClick={() => adjustCoeff('p', i, -1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-down pointer-events-none"></i></button>
+                                                    </div>
+                                                    <div className="text-2xl md:text-3xl font-medium flex items-baseline gap-1">
+                                                        {formatFormula(mol.f)} 
+                                                        {showStateSymbols && <span className="text-sm text-slate-500 font-light ml-1">({mol.s})</span>}
+                                                    </div>
                                                 </div>
-                                                <button className="btn-control" onClick={() => adjustCoeff('p', i, -1)} disabled={displayStatus==='correct' || (customLogic && customLogic.locked)}><i className="fa-solid fa-chevron-down"></i></button>
                                             </div>
-                                            <div className="text-2xl md:text-3xl font-medium flex items-baseline gap-1">
-                                                {formatFormula(mol.f)} 
-                                                {showStateSymbols && <span className="text-sm text-slate-500 font-light ml-1">({mol.s})</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {i < equation.products.length - 1 && <div className="text-slate-500 text-3xl mx-1 md:mx-3 self-center mt-2">+</div>}
-                                </React.Fragment>
-                            ))}
+                                            {i < equation.products.length - 1 && <div className="text-slate-500 text-3xl mx-1 md:mx-2 self-center mt-2">+</div>}
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            </ScaleToFit>
                         </div>
                     </div>
 
@@ -753,10 +798,10 @@
                         </table>
                     </div>
 
-                    {/* Action Area & Smart Hint & Skip Buttons */}
+                    {/* Action Area */}
                     <div className="min-h-[120px] flex flex-col items-center justify-start w-full max-w-2xl text-center">
                         
-                        {hint && displayStatus !== 'correct' && (
+                        {hint && displayStatus !== 'correct' && !isTutorial && (
                             <div className={`border px-4 py-3 rounded-xl mb-4 animate-pop w-full ${displayStatus === 'incorrect' ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-blue-500/10 border-blue-500/30 text-blue-300'}`}>
                                 <i className={`fa-solid ${displayStatus === 'incorrect' ? 'fa-circle-exclamation' : 'fa-lightbulb'} mr-2`}></i>
                                 {hint}
@@ -781,17 +826,15 @@
                                 )}
                             </div>
                         ) : (
-                            <div className="flex flex-wrap gap-4 justify-center items-center mt-2">
+                            <div className="flex flex-wrap gap-4 justify-center items-center mt-2 relative z-[5]">
                                 {!isTutorial && (
-                                    <button 
-                                        onClick={generateHint} 
-                                        className="px-6 py-2.5 rounded-full font-semibold bg-blue-900/30 text-blue-400 border border-blue-500/50 hover:bg-blue-800/50 transition-colors shadow-lg"
-                                    >
+                                    <button onClick={generateHint} className="px-6 py-2.5 rounded-full font-semibold bg-blue-900/30 text-blue-400 border border-blue-500/50 hover:bg-blue-800/50 transition-colors shadow-lg">
                                         <i className="fa-solid fa-lightbulb mr-2"></i>คำใบ้
                                     </button>
                                 )}
                                 
                                 <button 
+                                    id="btn-check-answer"
                                     onClick={handleVerify} 
                                     className={`px-10 py-3 rounded-full font-bold text-lg transition-all border shadow-lg ${displayStatus === 'incorrect' ? 'bg-red-900/40 border-red-500/50 text-red-200' : 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.3)]'}`}
                                 >
@@ -799,10 +842,7 @@
                                 </button>
                                 
                                 {!isTutorial && (
-                                    <button 
-                                        onClick={handleSkip} 
-                                        className="px-6 py-2.5 rounded-full font-semibold bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors shadow-lg"
-                                    >
+                                    <button onClick={handleSkip} className="px-6 py-2.5 rounded-full font-semibold bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-white transition-colors shadow-lg">
                                         ข้าม <i className="fa-solid fa-forward-step ml-2"></i>
                                     </button>
                                 )}
@@ -818,28 +858,32 @@
                                 <h3 className="text-2xl font-bold text-white mb-2">เฉลยสมการ</h3>
                                 <p className="text-slate-300 mb-6">เพื่อความเข้าใจที่ถูกต้อง นี่คือตัวเลขการดุลสมการที่สมบูรณ์ครับ</p>
                                 
-                                <div className="glass-dark p-5 md:p-6 rounded-2xl w-full flex flex-nowrap overflow-x-auto hide-scroll justify-start md:justify-center items-center text-2xl md:text-3xl font-medium mb-8 whitespace-nowrap">
-                                    {equation.reactants.map((mol, i) => (
-                                        <React.Fragment key={`ans-r-${i}`}>
-                                            <div className="flex items-baseline">
-                                                {equation.ans.r[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{equation.ans.r[i]}</span>}
-                                                <span>{formatFormula(mol.f)}</span>
-                                                {showStateSymbols && <span className="text-sm text-slate-400 ml-1">({mol.s})</span>}
-                                            </div>
-                                            {i < equation.reactants.length - 1 && <span className="mx-3 text-slate-500 font-bold">+</span>}
-                                        </React.Fragment>
-                                    ))}
-                                    <span className="mx-4 md:mx-6 text-orange-500 font-bold">→</span>
-                                    {equation.products.map((mol, i) => (
-                                        <React.Fragment key={`ans-p-${i}`}>
-                                            <div className="flex items-baseline">
-                                                {equation.ans.p[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{equation.ans.p[i]}</span>}
-                                                <span>{formatFormula(mol.f)}</span>
-                                                {showStateSymbols && <span className="text-sm text-slate-400 ml-1">({mol.s})</span>}
-                                            </div>
-                                            {i < equation.products.length - 1 && <span className="mx-3 text-slate-500 font-bold">+</span>}
-                                        </React.Fragment>
-                                    ))}
+                                <div className="glass-dark p-5 md:p-6 rounded-2xl w-full flex justify-center items-center mb-8">
+                                    <ScaleToFit>
+                                        <div className="flex items-center text-2xl md:text-3xl font-medium gap-1 px-2">
+                                            {equation.reactants.map((mol, i) => (
+                                                <React.Fragment key={`ans-r-${i}`}>
+                                                    <div className="flex items-baseline">
+                                                        {equation.ans.r[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{equation.ans.r[i]}</span>}
+                                                        <span>{formatFormula(mol.f)}</span>
+                                                        {showStateSymbols && <span className="text-sm text-slate-400 ml-1">({mol.s})</span>}
+                                                    </div>
+                                                    {i < equation.reactants.length - 1 && <span className="mx-3 text-slate-500 font-bold">+</span>}
+                                                </React.Fragment>
+                                            ))}
+                                            <span className="mx-4 md:mx-6 text-orange-500 font-bold">→</span>
+                                            {equation.products.map((mol, i) => (
+                                                <React.Fragment key={`ans-p-${i}`}>
+                                                    <div className="flex items-baseline">
+                                                        {equation.ans.p[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{equation.ans.p[i]}</span>}
+                                                        <span>{formatFormula(mol.f)}</span>
+                                                        {showStateSymbols && <span className="text-sm text-slate-400 ml-1">({mol.s})</span>}
+                                                    </div>
+                                                    {i < equation.products.length - 1 && <span className="mx-3 text-slate-500 font-bold">+</span>}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
+                                    </ScaleToFit>
                                 </div>
 
                                 <button onClick={closePopupAndNext} className="bg-orange-600 hover:bg-orange-500 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-transform transform hover:scale-105 mt-2">
@@ -852,94 +896,286 @@
             );
         };
 
-        const HomeTab = () => (
-            <div className="glass w-full max-w-3xl mx-auto p-8 md:p-12 rounded-3xl animate-fade-in flex flex-col items-center text-center">
-                <h1 className="text-3xl md:text-4xl font-bold text-orange-400 mb-8">หลักการดุลสมการเคมี</h1>
-                
-                <div className="space-y-6 text-slate-300 leading-relaxed text-lg flex flex-col items-center">
-                    <p>
-                        สมการเคมีแสดงการเปลี่ยนแปลงจาก <span className="text-blue-400 font-bold">สารตั้งต้น (Reactants)</span> ไปเป็น <span className="text-green-400 font-bold">ผลิตภัณฑ์ (Products)</span>
-                    </p>
-                    
-                    <div className="my-2">
-                        <div className="text-xl font-bold text-white mb-2">กฎทรงมวล (Law of Conservation of Mass)</div>
-                        <p>"มวลของสารก่อนทำปฏิกิริยา จะต้องเท่ากับมวลของสารหลังทำปฏิกิริยาเสมอ"</p>
-                        <p>นั่นหมายความว่า <span className="text-orange-400 font-bold text-xl">จำนวนอะตอมของแต่ละธาตุฝั่งซ้ายและฝั่งขวาต้องเท่ากัน</span></p>
-                    </div>
+        // --- NEW COMPONENT: Tutorial Overlay Mask ---
+        const TutorialOverlay = ({ step, isVisible, onConfirm, soundEnabled }) => {
+            const [rect, setRect] = useState(null);
 
-                    <div className="mt-8 w-full max-w-2xl glass-dark p-6 md:p-8 rounded-2xl border border-slate-700/50 shadow-lg">
-                        <h3 className="text-xl font-bold text-white mb-4 text-center">ขั้นตอนการดุลสมการ:</h3>
-                        <div className="space-y-3 text-left inline-block w-full">
-                            <p><span className="text-orange-400 font-bold mr-2">1.</span>ทำจำนวนอะตอมของธาตุหลัก (เช่น โลหะ หรือธาตุที่มีในสารเดียว) ให้เท่ากันก่อน</p>
-                            <p><span className="text-orange-400 font-bold mr-2">2.</span>ตามด้วยธาตุรองอื่นๆ</p>
-                            <p><span className="text-orange-400 font-bold mr-2">3.</span>ดุลไฮโดรเจน (H) และ ออกซิเจน (O) เป็นลำดับสุดท้าย</p>
-                            <p className="text-orange-500 font-bold mt-4"><i className="fa-solid fa-triangle-exclamation mr-2"></i>สำคัญ: เปลี่ยนได้เฉพาะตัวเลขหน้าสาร ห้ามเปลี่ยนเลขห้อยของสูตรเคมีเด็ดขาด!</p>
+            useEffect(() => {
+                if (!step || !isVisible) return;
+                
+                const updateRect = () => {
+                    const el = document.getElementById(step.targetId);
+                    if (el) {
+                        setRect(el.getBoundingClientRect());
+                    } else {
+                        setRect({ top: window.innerHeight/2, left: window.innerWidth/2, width: 0, height: 0, bottom: window.innerHeight/2, right: window.innerWidth/2 });
+                    }
+                };
+                
+                updateRect();
+                
+                const el = document.getElementById(step.targetId);
+                if (el) {
+                    const y = el.getBoundingClientRect().top + window.scrollY - 150;
+                    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+                }
+
+                window.addEventListener('resize', updateRect);
+                window.addEventListener('scroll', updateRect, true);
+                const intervalId = setInterval(updateRect, 100); 
+                
+                return () => {
+                    window.removeEventListener('resize', updateRect);
+                    window.removeEventListener('scroll', updateRect, true);
+                    clearInterval(intervalId);
+                };
+            }, [step, isVisible]);
+
+            if (!step || !isVisible || !rect) return null;
+
+            const pad = 4; 
+            const top = rect.top - pad;
+            const left = rect.left - pad;
+            const right = rect.right + pad;
+            const bottom = rect.bottom + pad;
+            const width = rect.width + (pad*2);
+            const height = rect.height + (pad*2);
+            
+            const wWidth = window.innerWidth;
+            const wHeight = window.innerHeight;
+
+            return (
+                <div className="fixed inset-0 z-[100] pointer-events-none">
+                    <div className="absolute bg-slate-900/85 pointer-events-auto transition-all duration-300" style={{ top: 0, left: 0, width: '100%', height: Math.max(0, top) }} />
+                    <div className="absolute bg-slate-900/85 pointer-events-auto transition-all duration-300" style={{ top: Math.min(wHeight, bottom), left: 0, width: '100%', height: Math.max(0, wHeight - bottom) }} />
+                    <div className="absolute bg-slate-900/85 pointer-events-auto transition-all duration-300" style={{ top: Math.max(0, top), left: 0, width: Math.max(0, left), height }} />
+                    <div className="absolute bg-slate-900/85 pointer-events-auto transition-all duration-300" style={{ top: Math.max(0, top), left: Math.min(wWidth, right), width: Math.max(0, wWidth - right), height }} />
+                    
+                    <div className="absolute border-2 border-orange-400 rounded-xl shadow-[0_0_20px_rgba(249,115,22,0.8)] animate-pulse transition-all duration-300 pointer-events-none" 
+                         style={{ top, left, width, height }} />
+
+                    {step.showHand && (
+                        <div className="absolute pointer-events-none flex flex-col items-center animate-bounce transition-all duration-300 z-[105]"
+                             style={{ top: bottom + 5, left: left + width/2 - 20 }}>
+                            <i className="fa-solid fa-hand-pointer text-5xl text-orange-400 drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] -rotate-12"></i>
                         </div>
+                    )}
+
+                    <div className="absolute pointer-events-auto glass-dark border-2 border-blue-500/80 px-4 py-3 md:px-6 md:py-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] max-w-2xl w-[90vw] transition-all duration-300 z-[105] flex flex-col items-center gap-3 md:gap-4"
+                         style={{ 
+                             top: bottom + 50 + 120 < wHeight ? bottom + 50 : Math.max(10, top - 140),
+                             left: '50%',
+                             transform: 'translateX(-50%)'
+                         }}>
+                         <div className="flex items-center gap-3 w-full">
+                             <div className="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-xl shrink-0 shadow-inner ring-4 ring-blue-500/30">
+                                 {step.id}
+                             </div>
+                             <div className="flex-1 w-full overflow-hidden flex items-center">
+                                 <ScaleToFit className="justify-start w-full">
+                                     <p className="text-white text-base md:text-lg font-medium drop-shadow-md pb-1 whitespace-nowrap">
+                                         {step.text}
+                                     </p>
+                                 </ScaleToFit>
+                             </div>
+                         </div>
+                         <button 
+                             onClick={() => { Sound.click(soundEnabled); onConfirm(); }} 
+                             className="bg-orange-600 hover:bg-orange-500 text-white px-8 py-2 rounded-xl font-bold whitespace-nowrap shadow-lg transition-transform transform hover:scale-105 animate-pulse shrink-0 text-base w-full md:w-auto"
+                         >
+                             เข้าใจแล้ว <i className="fa-solid fa-arrow-right ml-1"></i>
+                         </button>
                     </div>
                 </div>
+            );
+        };
+
+        // --- TABS ---
+        const HomeTab = () => (
+            <div className="w-full max-w-3xl mx-auto animate-fade-in flex flex-col space-y-6">
+                
+                <div className="glass p-8 md:p-10 rounded-3xl text-center shadow-lg border border-slate-700/50 relative overflow-hidden">
+                    <div className="absolute -top-10 -right-10 opacity-10 text-9xl">🧪</div>
+                    <h1 className="text-3xl md:text-4xl font-extrabold text-orange-400 mb-6 drop-shadow-sm">หลักการดุลสมการเคมี</h1>
+                    <p className="text-slate-200 text-[1.15rem] leading-loose">
+                        สมการเคมีแสดงการเปลี่ยนแปลงจาก <b>สารตั้งต้น (Reactants)</b> ไปเป็น <b>ผลิตภัณฑ์ (Products)</b> โดยจำนวนอะตอมของธาตุแต่ละชนิดฝั่งซ้ายและขวาจะต้องสมดุลกันเสมอ
+                    </p>
+                </div>
+                
+                <div className="glass-dark p-6 md:p-8 rounded-2xl border-l-4 border-blue-500 shadow-md flex items-start gap-4">
+                    <div className="bg-blue-900/50 w-12 h-12 rounded-full flex items-center justify-center shrink-0 mt-1">
+                        <i className="fa-solid fa-scale-balanced text-2xl text-blue-400"></i>
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white mb-2">กฎทรงมวล (Law of Conservation of Mass)</h3>
+                        <p className="text-slate-300 leading-relaxed text-[1.05rem]">
+                            มวลรวมของสารก่อนเกิดปฏิกิริยาจะต้องเท่ากับมวลรวมของสารหลังเกิดปฏิกิริยาเสมอ 
+                            ดังนั้น <span className="text-orange-400 font-bold mx-1">จำนวนอะตอมของแต่ละธาตุ ก่อนและหลังทำปฏิกิริยา จะต้องเท่ากัน</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800/60 p-6 md:p-8 rounded-2xl border border-slate-700 shadow-inner">
+                    <h4 className="text-yellow-400 font-bold text-xl mb-4 flex items-center">
+                        <i className="fa-solid fa-lightbulb mr-3"></i> เคล็ดลับการนับจำนวนอะตอม
+                    </h4>
+                    <p className="text-slate-200 leading-relaxed text-[1.05rem] mb-4">
+                        ในการนับจำนวนอะตอม ให้พิจารณาผลคูณระหว่าง <b>"ตัวเลขสัมประสิทธิ์ (ด้านหน้า)"</b> และ <b>"ตัวเลขห้อย"</b> ของธาตุนั้นๆ
+                    </p>
+                    <div className="bg-slate-900 p-5 rounded-xl border border-slate-700/80">
+                        <p className="text-slate-400 mb-3 text-sm">พิจารณาตัวอย่างต่อไปนี้:</p>
+                        <div className="text-center text-2xl mb-4 font-medium tracking-wide">
+                            <span className="text-orange-400 font-bold">3</span>H<sub className="text-yellow-400 font-bold">2</sub>O
+                        </div>
+                        <ul className="space-y-2 text-[1.05rem] text-slate-300 list-disc list-inside ml-2">
+                            <li><b>ธาตุไฮโดรเจน (H)</b> มีจำนวน <span className="text-orange-400">3</span> × <span className="text-yellow-400">2</span> = <b>6 อะตอม</b></li>
+                            <li><b>ธาตุออกซิเจน (O)</b> มีจำนวน <span className="text-orange-400">3</span> × 1 = <b>3 อะตอม</b> <span className="text-slate-400 text-sm">(หากไม่ปรากฏตัวเลขห้อย ถือว่ามีค่าเท่ากับ 1)</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div className="glass p-6 md:p-8 rounded-2xl border border-slate-700/50 shadow-lg">
+                    <h3 className="text-xl font-bold text-white mb-5 flex items-center">
+                        <i className="fa-solid fa-list-ol text-green-400 mr-3"></i> หลักการดุลสมการเคมีตามลำดับขั้นตอนเชิงวิทยาศาสตร์
+                    </h3>
+                    <div className="space-y-4 text-[1.05rem] text-slate-300 leading-relaxed">
+                        <div className="flex gap-3">
+                            <span className="text-green-400 font-bold">1.</span>
+                            <div>
+                                <b>พิจารณาสารประกอบที่ซับซ้อนที่สุดก่อน:</b> เริ่มดุลสมการจากโมเลกุลที่มีจำนวนอะตอมหรือชนิดธาตุมากที่สุด (เช่น ธาตุโลหะ หรือไอออนกลุ่ม) โดยหลีกเลี่ยงธาตุที่ปรากฏในสารหลายชนิดในตอนเริ่มต้น
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <span className="text-green-400 font-bold">2.</span>
+                            <div>
+                                <b>ดุลธาตุอโลหะและธาตุองค์ประกอบอื่นๆ:</b> ทำการปรับสัมประสิทธิ์จำนวนโมล (ด้านหน้า) เพื่อให้จำนวนอะตอมของธาตุที่เหลือในสารตั้งต้นและผลิตภัณฑ์มีความสมดุลตามกฎทรงมวล
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <span className="text-green-400 font-bold">3.</span>
+                            <div>
+                                <b>ดุลธาตุไฮโดรเจน (H) และออกซิเจน (O) ในขั้นสุดท้าย:</b> เนื่องจาก H และ O มักเป็นองค์ประกอบของสารหลายชนิด การดุลในภายหลังจะช่วยลดความซ้ำซ้อนและลดข้อผิดพลาดในการคำนวณ
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-6 bg-red-900/20 border border-red-500/30 p-4 rounded-xl flex items-start gap-3">
+                        <i className="fa-solid fa-triangle-exclamation text-red-400 mt-1"></i>
+                        <p className="text-red-200 text-[0.95rem] leading-relaxed">
+                            <b>ข้อควรระวัง:</b> ในการดุลสมการเคมี สามารถเปลี่ยนแปลงได้เฉพาะ <b>"ตัวเลขสัมประสิทธิ์ด้านหน้า"</b> เท่านั้น ห้ามเปลี่ยนแปลงตัวเลขห้อยของสูตรเคมีโดยเด็ดขาด เนื่องจากจะทำให้ชนิดของสารเปลี่ยนไป
+                        </p>
+                    </div>
+                </div>
+
             </div>
         );
 
         const StepByStepTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
-            const [step, setStep] = useState(0);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
             const [status, setStatus] = useState('idle');
+            const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+            
+            const tutorialSteps = useMemo(() => [
+                { id: 1, targetId: 'eq-display', text: "ยินดีต้อนรับ! เป้าหมายคือปรับเลขสัมประสิทธิ์เพื่อให้จำนวนอะตอมสมดุลกัน", requiresAction: false },
+                { id: 2, targetId: 'btn-up-p-0', text: "ขั้นที่ 1: ดุล (C) ฝั่งซ้าย C=3 ให้กดปุ่มปรับเลขหน้า CO₂ เป็น 3", requiresAction: true, condition: (c) => c.p[0] === 3, showHand: true },
+                { id: 3, targetId: 'btn-up-p-1', text: "ขั้นที่ 2: ดุล (H) ฝั่งซ้าย H=8 ให้กดปุ่มปรับเลขหน้า H₂O เป็น 4", requiresAction: true, condition: (c) => c.p[0] === 3 && c.p[1] === 4, showHand: true },
+                { id: 4, targetId: 'btn-up-r-1', text: "ขั้นที่ 3: ดุล (O) ฝั่งขวา O=10 ให้กดปุ่มปรับเลขหน้า O₂ เป็น 5", requiresAction: true, condition: (c) => c.p[0] === 3 && c.p[1] === 4 && c.r[1] === 5, showHand: true },
+                { id: 5, targetId: 'btn-check-answer', text: "ยอดเยี่ยม! อะตอมสมดุลแล้ว กดปุ่ม 'ตรวจสอบคำตอบ' เพื่อยืนยัน", requiresAction: true, condition: (c, s) => s === 'correct', showHand: true },
+                { id: 6, targetId: 'eq-display', text: "🎉 ภารกิจสำเร็จ! คุณผ่านการทดสอบหลักสูตรดุลสมการเคมีเบื้องต้นแล้ว", requiresAction: false }
+            ], []);
+
             const propaneEq = db.find(c => c.category === "การเผาไหม้").equations.find(e => e.id === "cb2");
             const [tutorialCoeffs, setTutorialCoeffs] = useState({ r: [1, 1], p: [1, 1] });
 
-            const instructions = [
-                <span key="1">ขั้นที่ 1: เริ่มต้นดุลธาตุคาร์บอน (C) โดยปรับตัวเลขหน้า {formatFormula("CO2")} ให้เท่ากับฝั่งซ้าย</span>,
-                <span key="2">ขั้นที่ 2: ถัดมาให้ดุลไฮโดรเจน (H) โดยปรับตัวเลขหน้า {formatFormula("H2O")} ให้เท่ากับฝั่งซ้าย</span>,
-                <span key="3">ขั้นที่ 3: อันดับสุดท้าย ดุลออกซิเจน (O) โดยนับรวมฝั่งขวา แล้วปรับตัวเลขหน้า {formatFormula("O2")} ฝั่งซ้าย</span>,
-                <span key="4" className="text-green-400"><i className="fa-solid fa-star mr-2"></i>สำเร็จ! คุณเข้าใจหลักการดุลสมการเคมีพื้นฐานแล้ว</span>
-            ];
+            const handleOverlayConfirm = () => {
+                Sound.click(soundEnabled);
+                const step = tutorialSteps[currentStepIndex];
+                
+                if (step.requiresAction) {
+                    setIsOverlayVisible(false);
+                } else {
+                    if (currentStepIndex < tutorialSteps.length - 1) {
+                        setCurrentStepIndex(s => s + 1);
+                    } else {
+                        setIsOverlayVisible(false);
+                    }
+                }
+            };
+
+            useEffect(() => {
+                const step = tutorialSteps[currentStepIndex];
+                if (step && step.requiresAction && !isOverlayVisible) {
+                    if (step.condition(tutorialCoeffs, status)) {
+                        Sound.success(soundEnabled);
+                        if (currentStepIndex < tutorialSteps.length - 1) {
+                            setCurrentStepIndex(s => s + 1);
+                            setIsOverlayVisible(true);
+                        }
+                    }
+                }
+            }, [tutorialCoeffs, status, currentStepIndex, isOverlayVisible, tutorialSteps, soundEnabled]);
 
             const handleVerify = (currentCoeffs) => {
-                let isStepCorrect = false;
-                if (step === 0) isStepCorrect = currentCoeffs.p[0] === 3;
-                else if (step === 1) isStepCorrect = currentCoeffs.p[1] === 4;
-                else if (step === 2) isStepCorrect = currentCoeffs.r[1] === 5;
-
-                if (isStepCorrect) {
-                    Sound.success(soundEnabled);
+                const isCorrect = currentCoeffs.r[1] === 5 && currentCoeffs.p[0] === 3 && currentCoeffs.p[1] === 4;
+                if (isCorrect) {
                     setStatus('correct');
-                    setTimeout(() => {
-                        if (step < 3) {
-                            setStep(s => s + 1);
-                            setStatus('idle');
-                        }
-                    }, 1500);
                 } else {
-                    Sound.error(soundEnabled);
                     setStatus('incorrect');
                 }
             };
 
+            const isCompleted = currentStepIndex >= tutorialSteps.length - 1 && !isOverlayVisible;
+
             return (
-                <div className="w-full flex flex-col items-center animate-fade-in">
-                    <div className="mb-6 text-center">
-                        <h2 className="text-2xl font-bold text-white mb-2">เรียนรู้ทีละขั้น: การเผาไหม้ก๊าซโพรเพน</h2>
-                        <p className="text-slate-400">ทำตามคำแนะนำในกล่องด้านล่างนี้</p>
-                    </div>
-
-                    <div className={`glass-dark border-2 p-4 rounded-xl w-full max-w-4xl mb-6 transition-colors duration-300 ${status === 'correct' ? 'border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]'}`}>
-                        <p className="text-xl text-white font-medium leading-relaxed">{instructions[step]}</p>
-                    </div>
-
-                    <EquationSolver 
-                        equation={propaneEq} 
-                        hideHeader={true}
-                        showStateSymbols={showStateSymbols}
-                        showParticles={showParticles}
-                        onToggleStateSymbols={onToggleStateSymbols}
-                        onToggleParticles={onToggleParticles}
-                        isTutorial={true}
+                <div className="w-full flex flex-col items-center animate-fade-in relative">
+                    
+                    <TutorialOverlay 
+                        step={tutorialSteps[currentStepIndex]} 
+                        isVisible={isOverlayVisible}
+                        onConfirm={handleOverlayConfirm}
                         soundEnabled={soundEnabled}
-                        customLogic={{ overrideCoeffs: tutorialCoeffs, onChange: setTutorialCoeffs, onVerify: handleVerify, status: status, setStatus: setStatus, locked: step === 3, hideNextButton: true }}
                     />
 
-                    {step === 3 && status === 'correct' && (
-                        <button onClick={() => { Sound.click(soundEnabled); setStep(0); setTutorialCoeffs({r:[1,1], p:[1,1]}); setStatus('idle'); }} className="mt-4 px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-full text-white border border-slate-600 transition-colors shadow-lg">
-                            <i className="fa-solid fa-rotate-right mr-2"></i> ลองทำใหม่อีกครั้ง
+                    <div className="mb-6 text-center z-10">
+                        <h2 className="text-2xl font-bold text-white mb-2">เรียนรู้ทีละขั้น: การเผาไหม้ก๊าซโพรเพน</h2>
+                        <p className="text-slate-400">
+                            {isOverlayVisible ? "อ่านภารกิจแล้วกดเข้าใจแล้วเพื่อลงมือทำ" : "กำลังทำภารกิจ..."}
+                        </p>
+                    </div>
+
+                    {!isOverlayVisible && currentStepIndex > 0 && currentStepIndex < tutorialSteps.length - 1 && (
+                        <div className="bg-blue-900/30 border border-blue-500 text-blue-200 px-6 py-3 rounded-xl mb-6 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse text-center max-w-lg w-full z-10 flex items-center justify-center gap-3">
+                            <i className="fa-solid fa-bell text-yellow-400 text-xl"></i>
+                            <span className="font-medium text-lg text-left">
+                                {tutorialSteps[currentStepIndex].text.replace(/^ขั้นที่ \d: /g, '')}
+                            </span>
+                        </div>
+                    )}
+
+                    <div className="w-full">
+                        <EquationSolver 
+                            equation={propaneEq} 
+                            hideHeader={true}
+                            showStateSymbols={showStateSymbols}
+                            showParticles={showParticles}
+                            onToggleStateSymbols={onToggleStateSymbols}
+                            onToggleParticles={onToggleParticles}
+                            isTutorial={true}
+                            soundEnabled={soundEnabled}
+                            customLogic={{ overrideCoeffs: tutorialCoeffs, onChange: setTutorialCoeffs, onVerify: handleVerify, status: status, setStatus: setStatus, locked: false, hideNextButton: true }}
+                        />
+                    </div>
+
+                    {isCompleted && status === 'correct' && (
+                        <button onClick={() => { 
+                            Sound.click(soundEnabled); 
+                            setTutorialCoeffs({r:[1,1], p:[1,1]}); 
+                            setStatus('idle'); 
+                            setCurrentStepIndex(0);
+                            setIsOverlayVisible(true); 
+                            window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                        }} className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-white shadow-lg z-10 relative">
+                            <i className="fa-solid fa-rotate-right mr-2"></i> เริ่มทำใหม่อีกครั้ง
                         </button>
                     )}
                 </div>
@@ -957,7 +1193,7 @@
             };
 
             return (
-                <div className="w-full relative">
+                <div className="w-full relative animate-fade-in">
                     <div className="flex justify-between items-center max-w-5xl mx-auto mb-6 px-4">
                         <div className="text-orange-500 font-medium text-lg"><i className="fa-solid fa-dice mr-2"></i>สุ่มโจทย์ท้าทาย</div>
                         <div className={`glass px-4 py-1.5 rounded-full flex items-center gap-2 font-bold transition-all ${streak > 0 ? 'text-orange-400 border-orange-500/50 shadow-[0_0_10px_rgba(249,115,22,0.3)] animate-pop' : 'text-slate-500 border-slate-700'}`}>
@@ -979,7 +1215,7 @@
             const handleNext = () => setEqIdx(i => i + 1);
 
             return (
-                <div className="w-full max-w-5xl mx-auto">
+                <div className="w-full max-w-5xl mx-auto animate-fade-in">
                     <div className="glass p-5 md:p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between mb-8 shadow-md max-w-4xl mx-auto">
                         <span className="text-slate-300 font-medium text-lg mb-3 md:mb-0">
                             <i className="fa-solid fa-layer-group mr-2 text-orange-400"></i>เลือกหมวดหมู่ปฏิกิริยา:
@@ -1001,14 +1237,14 @@
                         <div className="text-center mt-20 animate-fade-in glass p-12 rounded-3xl border border-green-500/30 max-w-4xl mx-auto">
                             <i className="fa-solid fa-medal text-6xl text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)]"></i>
                             <h2 className="text-3xl font-bold mb-2">ยินดีด้วย ผู้พิทักษ์กฎทรงมวล!</h2>
-                            <p className="text-slate-300 mb-6">คุณทำโจทย์หมวด "{category.category}" สำเร็จครบทุกข้อแล้ว</p>
-                            <button onClick={() => { Sound.click(soundEnabled); setEqIdx(0); }} className="px-6 py-2 bg-[#1e293b] border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors shadow-lg">
+                            <p className="text-slate-300 mb-6 text-lg">คุณทำโจทย์หมวด "{category.category}" สำเร็จครบทุกข้อแล้วครับ</p>
+                            <button onClick={() => { Sound.click(soundEnabled); setEqIdx(0); }} className="px-8 py-3 bg-[#1e293b] border border-slate-600 rounded-xl hover:bg-slate-700 transition-colors shadow-lg font-bold">
                                 <i className="fa-solid fa-rotate-left mr-2"></i> ทำหมวดนี้อีกครั้ง
                             </button>
                         </div>
                     ) : (
                         <div>
-                            <div className="text-center text-slate-400 mb-4 font-medium">ข้อที่ <span className="text-orange-400">{eqIdx + 1}</span> / {category.equations.length}</div>
+                            <div className="text-center text-slate-400 mb-4 font-medium text-lg">ข้อที่ <span className="text-orange-400">{eqIdx + 1}</span> / {category.equations.length}</div>
                             <EquationSolver key={`${catIdx}-${eqIdx}`} equation={{...category.equations[eqIdx], categoryName: category.category}} showStateSymbols={showStateSymbols} showParticles={showParticles} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} soundEnabled={soundEnabled} onNext={handleNext} />
                         </div>
                     )}
@@ -1021,7 +1257,7 @@
             const [activeTab, setActiveTab] = useState('home');
             const [showStateSymbols, setShowStateSymbols] = useState(true);
             const [showParticles, setShowParticles] = useState(false);
-            const [soundEnabled, setSoundEnabled] = useState(true); // สถานะเปิด-ปิดเสียง
+            const [soundEnabled, setSoundEnabled] = useState(true);
 
             const handleTabSwitch = (tab) => {
                 Sound.click(soundEnabled);
@@ -1047,28 +1283,27 @@
 
             return (
                 <div className="min-h-screen flex flex-col p-4 md:p-8">
-                    <nav className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row justify-between items-center mb-10 gap-6 glass px-6 md:px-8 py-4 rounded-2xl">
+                    <nav className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row justify-between items-center mb-10 gap-6 glass px-6 md:px-8 py-4 rounded-2xl relative z-[120]">
                         <div className="text-2xl font-bold tracking-wider text-white drop-shadow-md">
                             Phatthana <span className="text-orange-500">Lab</span>
                         </div>
-                        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 text-sm md:text-base font-medium">
+                        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 text-sm md:text-[1.05rem] font-medium">
                             <button onClick={() => handleTabSwitch('home')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'home' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>หน้าแรก</button>
                             <button onClick={() => handleTabSwitch('step')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'step' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>เรียนทีละขั้น</button>
                             <button onClick={() => handleTabSwitch('free')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'free' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>เล่นอิสระ</button>
                             <button onClick={() => handleTabSwitch('bank')} className={`pb-1 border-b-2 transition-colors ${activeTab === 'bank' ? 'text-orange-500 border-orange-500' : 'text-slate-400 border-transparent hover:text-white'}`}>คลังโจทย์</button>
                             
-                            {/* ปุ่มเปิด-ปิดเสียง (Toggle Sound) */}
                             <div className="h-6 w-px bg-slate-700 mx-2 hidden md:block"></div>
                             <button 
                                 onClick={() => { Sound.click(!soundEnabled); setSoundEnabled(!soundEnabled); }} 
-                                className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${soundEnabled ? 'text-green-400 bg-slate-800 hover:bg-slate-700' : 'text-slate-500 bg-slate-800/50 hover:bg-slate-800'}`}
+                                className={`flex items-center justify-center w-9 h-9 rounded-full transition-all ${soundEnabled ? 'text-green-400 bg-slate-800 hover:bg-slate-700' : 'text-slate-500 bg-slate-800/50 hover:bg-slate-800'}`}
                                 title={soundEnabled ? "ปิดเสียง" : "เปิดเสียง"}
                             >
                                 <i className={`fa-solid ${soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}`}></i>
                             </button>
                         </div>
                     </nav>
-                    <main className="flex-grow w-full overflow-hidden">
+                    <main className="flex-grow w-full overflow-x-hidden">
                         {renderTab()}
                     </main>
                 </div>
