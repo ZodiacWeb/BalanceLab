@@ -104,7 +104,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } = React;
 
-        // --- COMPONENT: Auto Scale to Fit (ย่อขนาดอัตโนมัติในบรรทัดเดียว ไม่มี Scrollbar) ---
+        // --- COMPONENT: Auto Scale to Fit (คำนวณขนาดแม่นยำด้วย ResizeObserver & MutationObserver) ---
         const ScaleToFit = ({ children, align = "center", className = "" }) => {
             const containerRef = useRef(null);
             const contentRef = useRef(null);
@@ -114,7 +114,7 @@
             const updateScale = useCallback(() => {
                 if (containerRef.current && contentRef.current) {
                     const containerWidth = containerRef.current.clientWidth;
-                    const contentWidth = contentRef.current.scrollWidth;
+                    const contentWidth = contentRef.current.offsetWidth || contentRef.current.scrollWidth;
                     const contentHeight = contentRef.current.offsetHeight;
                     
                     let nextScale = 1;
@@ -136,13 +136,23 @@
             useLayoutEffect(() => {
                 updateScale();
                 window.addEventListener('resize', updateScale);
+                
                 const observer = new MutationObserver(updateScale);
                 if (contentRef.current) {
                     observer.observe(contentRef.current, { subtree: true, childList: true, characterData: true });
                 }
+                
+                let resizeObserver = null;
+                if (window.ResizeObserver) {
+                    resizeObserver = new ResizeObserver(updateScale);
+                    if (containerRef.current) resizeObserver.observe(containerRef.current);
+                    if (contentRef.current) resizeObserver.observe(contentRef.current);
+                }
+
                 return () => {
                     window.removeEventListener('resize', updateScale);
                     observer.disconnect();
+                    if (resizeObserver) resizeObserver.disconnect();
                 };
             }, [updateScale, children]);
 
@@ -163,7 +173,9 @@
                             transformOrigin: originStyle, 
                             whiteSpace: 'nowrap', 
                             display: 'inline-flex', 
-                            alignItems: 'center' 
+                            alignItems: 'center',
+                            width: 'max-content',
+                            flexShrink: 0
                         }}
                     >
                         {children}
@@ -304,7 +316,9 @@
             }
         };
 
+        // แก้ไข MoleculeSVG: กำหนดทั้ง width และ height เป็น 72px และสร้าง Unique ID ป้องกันโมเลกุลซ้อนทับกันบนโทรศัพท์
         const MoleculeSVG = ({ formula, atomsObj }) => {
+            const uniqueId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
             let layout = moleculeLayouts[formula];
             
             if (!layout) {
@@ -357,10 +371,16 @@
             const vbX = 50 - halfSize;
             const vbY = 50 - halfSize;
 
-            const safeFormula = formula.replace(/[^a-zA-Z0-9]/g, '');
+            const safeFormula = `${formula.replace(/[^a-zA-Z0-9]/g, '')}-${uniqueId}`;
 
             return (
-                <svg height="72" viewBox={`${vbX} ${vbY} ${size} ${size}`} className="drop-shadow-lg mx-1 my-1 overflow-visible shrink-0">
+                <svg 
+                    width="72" 
+                    height="72" 
+                    viewBox={`${vbX} ${vbY} ${size} ${size}`} 
+                    style={{ minWidth: '72px', minHeight: '72px' }}
+                    className="drop-shadow-lg m-0.5 overflow-visible shrink-0 block"
+                >
                     <defs>
                         <filter id={`shadow-${safeFormula}`}>
                             <feDropShadow dx="1.5" dy="2.5" stdDeviation="1.5" floodColor="#000000" floodOpacity="0.4" />
@@ -654,73 +674,74 @@
                 return html;
             };
 
+            // แก้ไข renderParticleEquation: ใช้ repeat(cols, 76px) แทน minmax(0, 1fr) เพื่อไม่ให้คอลัมน์ถูกบีบจนโมเลกุลซ้อนกันบนโทรศัพท์
             const renderParticleEquation = () => {
                 return (
                     <div className="w-full py-2">
                         <ScaleToFit>
-                            <div className="flex items-center justify-center px-4 py-2 gap-3 md:gap-5">
-                                <div className="flex items-center justify-center gap-3">
+                            <div className="flex items-center justify-center px-3 py-2 gap-3 md:gap-5 shrink-0">
+                                <div className="flex items-center justify-center gap-3 shrink-0">
                                     {equation.reactants.map((mol, i) => {
                                         const count = coeffs.r[i] || 1;
-                                        const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
+                                        const cols = count === 1 ? 1 : count <= 4 ? 2 : 3;
                                         return (
                                             <React.Fragment key={`pr-${i}`}>
-                                                <div className="flex flex-col items-center bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+                                                <div className="flex flex-col items-center bg-slate-900/60 p-3 rounded-2xl border border-slate-800 shrink-0">
                                                     <div 
-                                                        className="grid gap-1 place-items-center" 
-                                                        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                                                        className="grid gap-2 place-items-center shrink-0" 
+                                                        style={{ gridTemplateColumns: `repeat(${cols}, 76px)` }}
                                                     >
                                                         {Array.from({length: Math.min(count, 9)}).map((_, c) => 
                                                             <MoleculeSVG key={c} formula={mol.f} atomsObj={mol.atoms} />
                                                         )}
                                                     </div>
                                                     {count > 9 && (
-                                                        <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full mt-1">
+                                                        <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full mt-1.5">
                                                             + {count - 9} โมเลกุล
                                                         </span>
                                                     )}
-                                                    <span className="text-xs text-slate-400 mt-1 font-medium">
+                                                    <span className="text-xs text-slate-400 mt-1.5 font-medium">
                                                         {count > 1 ? <span className="text-orange-400 font-bold mr-1">{count}</span> : null}
                                                         {formatFormula(mol.f)}
                                                     </span>
                                                 </div>
                                                 {i < equation.reactants.length - 1 && (
-                                                    <div className="text-slate-400 text-3xl font-black mx-1 leading-none">+</div>
+                                                    <div className="text-slate-400 text-3xl font-black mx-1 leading-none shrink-0">+</div>
                                                 )}
                                             </React.Fragment>
                                         );
                                     })}
                                 </div>
                                 
-                                <div className="text-orange-500 text-4xl mx-2 font-bold leading-none">→</div>
+                                <div className="text-orange-500 text-4xl mx-2 font-bold leading-none shrink-0">→</div>
                                 
-                                <div className="flex items-center justify-center gap-3">
+                                <div className="flex items-center justify-center gap-3 shrink-0">
                                     {equation.products.map((mol, i) => {
                                         const count = coeffs.p[i] || 1;
-                                        const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
+                                        const cols = count === 1 ? 1 : count <= 4 ? 2 : 3;
                                         return (
                                             <React.Fragment key={`pp-${i}`}>
-                                                <div className="flex flex-col items-center bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+                                                <div className="flex flex-col items-center bg-slate-900/60 p-3 rounded-2xl border border-slate-800 shrink-0">
                                                     <div 
-                                                        className="grid gap-1 place-items-center" 
-                                                        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                                                        className="grid gap-2 place-items-center shrink-0" 
+                                                        style={{ gridTemplateColumns: `repeat(${cols}, 76px)` }}
                                                     >
                                                         {Array.from({length: Math.min(count, 9)}).map((_, c) => 
                                                             <MoleculeSVG key={c} formula={mol.f} atomsObj={mol.atoms} />
                                                         )}
                                                     </div>
                                                     {count > 9 && (
-                                                        <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full mt-1">
+                                                        <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full mt-1.5">
                                                             + {count - 9} โมเลกุล
                                                         </span>
                                                     )}
-                                                    <span className="text-xs text-slate-400 mt-1 font-medium">
+                                                    <span className="text-xs text-slate-400 mt-1.5 font-medium">
                                                         {count > 1 ? <span className="text-orange-400 font-bold mr-1">{count}</span> : null}
                                                         {formatFormula(mol.f)}
                                                     </span>
                                                 </div>
                                                 {i < equation.products.length - 1 && (
-                                                    <div className="text-slate-400 text-3xl font-black mx-1 leading-none">+</div>
+                                                    <div className="text-slate-400 text-3xl font-black mx-1 leading-none shrink-0">+</div>
                                                 )}
                                             </React.Fragment>
                                         );
@@ -772,7 +793,7 @@
                                 <i className="fa-solid fa-hand-pointer mr-2 text-slate-400"></i>แตะลูกศรเพื่อปรับตัวเลขสัมประสิทธิ์
                             </div>
                             
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 md:gap-4">
                                 {onToggleParticles && (
                                     <button 
                                         id="btn-toggle-particles"
@@ -1016,7 +1037,7 @@
             );
         };
 
-        // --- COMPONENT: Tutorial Overlay Mask (ปรับให้เห็นสมการด้านหลังชัดเจน ไม่บังแถวสมการ และมีคำอธิบายละเอียด) ---
+        // --- COMPONENT: Tutorial Overlay Mask ---
         const TutorialOverlay = ({ step, isVisible, onConfirm, soundEnabled, equation, coeffs }) => {
             const [rect, setRect] = useState(null);
             const [eqBoxBottom, setEqBoxBottom] = useState(null);
@@ -1058,7 +1079,6 @@
 
             if (!step || !isVisible) return null;
 
-            // หน้าต่างตัวการ์ตูนถามความพร้อม (Mascot Modal)
             if (step.type === 'mascot') {
                 return (
                     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-4 animate-fade-in">
@@ -1097,7 +1117,6 @@
             const wWidth = window.innerWidth;
             const wHeight = window.innerHeight;
 
-            // หากเป็นการสอนขั้นตอนดุลสมการ ให้วางป๊อปอัปไว้ใต้กล่องสมการ เพื่อให้นักเรียนเห็นสมการข้างหลังชัดเจน ไม่ถูกบัง
             let popupTop = bottom + 55;
             if (step.type === 'step' && eqBoxBottom && step.targetId.startsWith('btn-up')) {
                 popupTop = Math.min(wHeight - 230, Math.max(bottom + 55, eqBoxBottom - 10));
@@ -1105,7 +1124,6 @@
                 popupTop = Math.max(12, top - 200);
             }
 
-            // แสดงสมการอ้างอิงภายในป๊อปอัปด้วยเพื่อคิดตามได้ง่าย
             const renderMiniEq = () => {
                 if (!equation || !coeffs) return null;
                 return (
@@ -1135,7 +1153,6 @@
 
             return (
                 <div className="fixed inset-0 z-[100] pointer-events-none">
-                    {/* ปรับความโปร่งแสงเป็น 50% เพื่อให้นักเรียนมองเห็นสมการและตารางด้านหลังได้ชัดเจน */}
                     <div className="absolute bg-slate-950/50 pointer-events-auto transition-all duration-300" style={{ top: 0, left: 0, width: '100%', height: Math.max(0, top) }} />
                     <div className="absolute bg-slate-950/50 pointer-events-auto transition-all duration-300" style={{ top: Math.min(wHeight, bottom), left: 0, width: '100%', height: Math.max(0, wHeight - bottom) }} />
                     <div className="absolute bg-slate-950/50 pointer-events-auto transition-all duration-300" style={{ top: Math.max(0, top), left: 0, width: Math.max(0, left), height }} />
@@ -1158,7 +1175,6 @@
                              transform: 'translateX(-50%)'
                          }}>
                          
-                         {/* แสดงสมการปัจจุบันให้เห็นชัดๆ ในป๊อปอัปควบคู่กับสมการด้านหลัง */}
                          {step.type === 'step' && (
                              <div className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-1.5 flex items-center justify-center">
                                  <ScaleToFit>
@@ -1308,21 +1324,19 @@
             </div>
         );
 
-        // โหมดเรียนทีละขั้น: พร้อมคำอธิบายเหตุผลละเอียด และไม่มีกรอบล้อมกระดิ่งแจ้งเตือน
+        // โหมดเรียนทีละขั้น
         const StepByStepTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
             const [currentStepIndex, setCurrentStepIndex] = useState(0);
             const [status, setStatus] = useState('idle');
             const [isOverlayVisible, setIsOverlayVisible] = useState(true);
             
             const tutorialSteps = useMemo(() => [
-                // ช่วงแนะนำองค์ประกอบของระบบ
                 { type: 'ui', badgeIcon: 'fa-flask', targetId: 'eq-display', text: "แถบสมการด้านบน: ใช้แสดงสมการเคมีปัจจุบันและสถานะว่าสมดุลหรือยัง", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-circle-nodes', targetId: 'btn-toggle-particles', text: "ปุ่มเปิดโมเดลอนุภาค: ใช้แสดงภาพจำลองโมเลกุล ช่วยให้เห็นภาพการจับคู่อะตอม", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-eye', targetId: 'btn-toggle-states', text: "ปุ่มสถานะสาร: ใช้สำหรับเปิดหรือซ่อนสัญลักษณ์สถานะของสารในสมการ", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-table', targetId: 'atom-counter-box', text: "ตารางนับอะตอม: คำนวณจำนวนอะตอมฝั่งซ้ายและขวาให้อัตโนมัติทันทีที่ปรับตัวเลข", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-lightbulb', targetId: 'action-buttons-group', text: "แถบปุ่มตัวช่วย: มีปุ่ม 'คำใบ้' ช่วยแนะแนวทาง และปุ่ม 'ข้าม' สำหรับดูเฉลย", requiresAction: false, btnText: "ถัดไป" },
                 
-                // ตัวการ์ตูนถามความพร้อม
                 { 
                     type: 'mascot', 
                     title: "พร้อมจะลุยกันหรือยัง?", 
@@ -1331,7 +1345,6 @@
                     btnText: "พร้อมแล้ว ลุยเลย!" 
                 },
 
-                // ช่วงสอนดุลสมการทีละขั้น พร้อมคำอธิบายว่าทำไมต้องปรับเป็นตัวเลขนั้นๆ
                 { 
                     type: 'step', 
                     badgeNum: 1, 
@@ -1441,7 +1454,6 @@
                         </p>
                     </div>
 
-                    {/* แถบแจ้งเตือนภารกิจ: นำกรอบสี่เหลี่ยมที่ล้อมกระดิ่งออกให้ดูสะอาดตา และแสดงเหตุผลประกอบ */}
                     {!isOverlayVisible && activeStep && activeStep.requiresAction && (
                         <div className="bg-blue-950/80 border-2 border-blue-500 text-blue-100 px-5 py-3.5 rounded-2xl mb-6 shadow-[0_0_20px_rgba(59,130,246,0.35)] max-w-3xl w-full z-10 flex flex-col gap-1.5 overflow-hidden">
                             <div className="flex items-center gap-3 w-full">
