@@ -249,6 +249,90 @@
         };
         const getAtomColor = (a) => atomColors[a] || { light: '#e2e8f0', dark: '#64748b', text: '#ffffff' };
 
+        // --- CHEMICAL THAI NAMES MAPPING (ชื่อเรียกสารเคมีภาษาไทย) ---
+        const chemicalNames = {
+            "H2": "แก๊สไฮโดรเจน",
+            "O2": "แก๊สออกซิเจน",
+            "H2O": "น้ำ",
+            "N2": "แก๊สไนโตรเจน",
+            "NH3": "แอมโมเนีย",
+            "Mg": "แมกนีเซียม",
+            "MgO": "แมกนีเซียมออกไซด์",
+            "Na": "โซเดียม",
+            "Cl2": "แก๊สคลอรีน",
+            "NaCl": "โซเดียมคลอไรด์",
+            "P": "ฟอสฟอรัส",
+            "P2O5": "ฟอสฟอรัสเพนตะออกไซด์",
+            "H2O2": "ไฮโดรเจนเปอร์ออกไซด์",
+            "KClO3": "โพแทสเซียมคลอเรต",
+            "KCl": "โพแทสเซียมคลอไรด์",
+            "NaHCO3": "โซเดียมไบคาร์บอเนต",
+            "Na2CO3": "โซเดียมคาร์บอเนต",
+            "CO2": "คาร์บอนไดออกไซด์",
+            "Ag2O": "ซิลเวอร์ออกไซด์",
+            "Ag": "เงิน",
+            "Zn": "สังกะสี",
+            "HCl": "กรดไฮโดรคลอริก",
+            "ZnCl2": "ซิงก์คลอไรด์",
+            "AgNO3": "ซิลเวอร์ไนเตรต",
+            "Mg(NO3)2": "แมกนีเซียมไนเตรต",
+            "Al": "อะลูมิเนียม",
+            "Fe2O3": "ไอร์ออน(III)ออกไซด์",
+            "Al2O3": "อะลูมิเนียมออกไซด์",
+            "Fe": "เหล็ก",
+            "Cu": "ทองแดง",
+            "Cu(NO3)2": "คอปเปอร์(II)ไนเตรต",
+            "KI": "โพแทสเซียมไอโอไดด์",
+            "I2": "ไอโอดีน",
+            "H2SO4": "กรดซัลฟิวริก",
+            "KOH": "โพแทสเซียมไฮดรอกไซด์",
+            "K2SO4": "โพแทสเซียมซัลเฟต",
+            "Ca(OH)2": "แคลเซียมไฮดรอกไซด์",
+            "CaCl2": "แคลเซียมคลอไรด์",
+            "H3PO4": "กรดฟอสฟอริก",
+            "NaOH": "โซเดียมไฮดรอกไซด์",
+            "Na3PO4": "โซเดียมฟอสเฟต",
+            "Mg(OH)2": "แมกนีเซียมไฮดรอกไซด์",
+            "MgSO4": "แมกนีเซียมซัลเฟต",
+            "Al(OH)3": "อะลูมิเนียมไฮดรอกไซด์",
+            "AlCl3": "อะลูมิเนียมคลอไรด์",
+            "MgCl2": "แมกนีเซียมคลอไรด์",
+            "Al2(SO4)3": "อะลูมิเนียมซัลเฟต",
+            "FeCl2": "ไอร์ออน(II)คลอไรด์",
+            "Na2ZnO2": "โซเดียมซิงเคต",
+            "NaAlO2": "โซเดียมอะลูมิเนต",
+            "K2ZnO2": "โพแทสเซียมซิงเคต",
+            "Si": "ซิลิคอน",
+            "Na2SiO3": "โซเดียมซิลิเกต",
+            "Pb": "ตะกั่ว",
+            "Na2PbO2": "โซเดียมพลัมไบต์",
+            "Fe(OH)3": "ไอร์ออน(III)ไฮดรอกไซด์",
+            "Fe3O4": "ไอร์ออน(II,III)ออกไซด์",
+            "CuO": "คอปเปอร์(II)ออกไซด์",
+            "CH4": "มีเทน",
+            "C3H8": "โพรเพน",
+            "C2H5OH": "เอทานอล",
+            "C2H6": "อีเทน",
+            "C4H10": "บิวเทน",
+            "SO2": "ซัลเฟอร์ไดออกไซด์",
+            "SO3": "ซัลเฟอร์ไตรออกไซด์",
+            "NO2": "ไนโตรเจนไดออกไซด์",
+            "HNO3": "กรดไนตริก",
+            "NO": "ไนตริกออกไซด์",
+            "C6H12O6": "กลูโคส",
+            "H2S": "ไฮโดรเจนซัลไฟด์",
+            "S": "กำมะถัน",
+            "C12H22O11": "ซูโครส",
+            "C": "คาร์บอน",
+            "CaCO3": "แคลเซียมคาร์บอเนต",
+            "CaO": "แคลเซียมออกไซด์",
+            "CuSO4": "คอปเปอร์(II)ซัลเฟต",
+            "FeSO4": "ไอร์ออน(II)ซัลเฟต",
+            "ZnSO4": "ซิงก์ซัลเฟต",
+            "MgCO3": "แมกนีเซียมคาร์บอเนต"
+        };
+        const getChemicalName = (f) => chemicalNames[f] || f;
+
         // --- VSEPR MOLECULE GEOMETRY MAPPING ---
         const moleculeLayouts = {
             "H2": { nodes: [{e:"H",x:35,y:50}, {e:"H",x:65,y:50}], links: [[0,1]] },
@@ -608,7 +692,7 @@
         // --- COMPONENTS ---
 
         // 1. Equation Solver
-        const EquationSolver = ({ equation, onNext, hideHeader = false, customLogic = null, showStateSymbols = true, showParticles = false, onToggleStateSymbols, onToggleParticles, onSuccessFirstTry, onFail, isTutorial = false, soundEnabled = true }) => {
+        const EquationSolver = ({ equation, onNext, hideHeader = false, customLogic = null, showStateSymbols = true, showParticles = false, showWordEquation = false, onToggleStateSymbols, onToggleParticles, onToggleWordEquation, onSuccessFirstTry, onFail, isTutorial = false, soundEnabled = true }) => {
             const [coeffs, setCoeffs] = useState({ r: [], p: [] });
             const [status, setStatus] = useState('idle');
             const [hint, setHint] = useState('');
@@ -724,17 +808,60 @@
             const renderCurrentEq = () => {
                 let html = [];
                 equation.reactants.forEach((mol, i) => {
-                    if (coeffs.r[i] > 1) html.push(<span key={`cr-${i}`} className="text-orange-500 mr-2 font-bold">{coeffs.r[i]}</span>);
-                    html.push(<span key={`mr-${i}`}>{formatFormula(mol.f)}</span>);
-                    if (showStateSymbols) html.push(<span key={`sr-${i}`} className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>);
-                    if (i < equation.reactants.length - 1) html.push(<span key={`pr-${i}`} className="mx-3 text-slate-500 font-bold">+</span>);
+                    html.push(
+                        <div key={`item-r-${i}`} className="flex flex-col items-center">
+                            <div className="flex items-baseline">
+                                {coeffs.r[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{coeffs.r[i]}</span>}
+                                <span>{formatFormula(mol.f)}</span>
+                                {showStateSymbols && <span className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>}
+                            </div>
+                            {showWordEquation && (
+                                <div className="text-xs md:text-sm text-amber-300/90 font-normal mt-1.5 px-2.5 py-0.5 bg-slate-800/80 rounded-md border border-slate-700/60 tracking-normal shadow-sm">
+                                    {getChemicalName(mol.f)}
+                                </div>
+                            )}
+                        </div>
+                    );
+                    if (i < equation.reactants.length - 1) {
+                        html.push(
+                            <div key={`pr-${i}`} className="flex flex-col items-center mx-3">
+                                <span className="text-slate-500 font-bold">+</span>
+                                {showWordEquation && <span className="text-xs md:text-sm text-slate-500 font-normal mt-1.5 py-0.5">+</span>}
+                            </div>
+                        );
+                    }
                 });
-                html.push(<span key="arrow" className="mx-4 md:mx-6 text-orange-500 font-bold">→</span>);
+                
+                html.push(
+                    <div key="arrow" className="flex flex-col items-center mx-4 md:mx-6">
+                        <span className="text-orange-500 font-bold">→</span>
+                        {showWordEquation && <span className="text-xs md:text-sm text-orange-400/80 font-normal mt-1.5 py-0.5">→</span>}
+                    </div>
+                );
+
                 equation.products.forEach((mol, i) => {
-                    if (coeffs.p[i] > 1) html.push(<span key={`cp-${i}`} className="text-orange-500 mr-2 font-bold">{coeffs.p[i]}</span>);
-                    html.push(<span key={`mp-${i}`}>{formatFormula(mol.f)}</span>);
-                    if (showStateSymbols) html.push(<span key={`sp-${i}`} className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>);
-                    if (i < equation.products.length - 1) html.push(<span key={`pp-${i}`} className="mx-3 text-slate-500 font-bold">+</span>);
+                    html.push(
+                        <div key={`item-p-${i}`} className="flex flex-col items-center">
+                            <div className="flex items-baseline">
+                                {coeffs.p[i] > 1 && <span className="text-orange-500 mr-2 font-bold">{coeffs.p[i]}</span>}
+                                <span>{formatFormula(mol.f)}</span>
+                                {showStateSymbols && <span className="text-sm md:text-base text-slate-400 ml-1">({mol.s})</span>}
+                            </div>
+                            {showWordEquation && (
+                                <div className="text-xs md:text-sm text-amber-300/90 font-normal mt-1.5 px-2.5 py-0.5 bg-slate-800/80 rounded-md border border-slate-700/60 tracking-normal shadow-sm">
+                                    {getChemicalName(mol.f)}
+                                </div>
+                            )}
+                        </div>
+                    );
+                    if (i < equation.products.length - 1) {
+                        html.push(
+                            <div key={`pp-${i}`} className="flex flex-col items-center mx-3">
+                                <span className="text-slate-500 font-bold">+</span>
+                                {showWordEquation && <span className="text-xs md:text-sm text-slate-500 font-normal mt-1.5 py-0.5">+</span>}
+                            </div>
+                        );
+                    }
                 });
                 return html;
             };
@@ -843,7 +970,7 @@
                         
                         <div className="w-full flex items-center justify-center pt-3 pb-3">
                             <ScaleToFit>
-                                <div className="flex items-center text-3xl md:text-4xl font-medium tracking-wide px-2">
+                                <div className="flex items-start text-3xl md:text-4xl font-medium tracking-wide px-2">
                                     {renderCurrentEq()}
                                 </div>
                             </ScaleToFit>
@@ -857,7 +984,7 @@
                                 <i className="fa-solid fa-hand-pointer mr-2 text-slate-400"></i>แตะลูกศรเพื่อปรับตัวเลขสัมประสิทธิ์
                             </div>
                             
-                            <div className="flex items-center gap-3 md:gap-4">
+                            <div className="flex items-center flex-wrap gap-2 md:gap-3">
                                 {onToggleParticles && (
                                     <button 
                                         id="btn-toggle-particles"
@@ -878,6 +1005,17 @@
                                     >
                                         <i className={`fa-solid ${showStateSymbols ? 'fa-eye' : 'fa-eye-slash'}`}></i>
                                         สถานะสาร
+                                    </button>
+                                )}
+                                {onToggleWordEquation && (
+                                    <button 
+                                        id="btn-toggle-names"
+                                        onClick={() => { Sound.click(soundEnabled); onToggleWordEquation(); }}
+                                        className="text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700 hover:text-white"
+                                        style={{ color: showWordEquation ? '#fbbf24' : '#94a3b8' }}
+                                    >
+                                        <i className={`fa-solid ${showWordEquation ? 'fa-tag' : 'fa-tags'}`}></i>
+                                        ชื่อสาร
                                     </button>
                                 )}
                             </div>
@@ -1389,7 +1527,7 @@
         );
 
         // โหมดเรียนทีละขั้น
-        const StepByStepTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
+        const StepByStepTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, showWordEquation, onToggleWordEquation, soundEnabled }) => {
             const [currentStepIndex, setCurrentStepIndex] = useState(0);
             const [status, setStatus] = useState('idle');
             const [isOverlayVisible, setIsOverlayVisible] = useState(true);
@@ -1398,6 +1536,7 @@
                 { type: 'ui', badgeIcon: 'fa-flask', targetId: 'eq-display', text: "แถบสมการด้านบน: ใช้แสดงสมการเคมีปัจจุบันและสถานะว่าสมดุลหรือยัง", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-circle-nodes', targetId: 'btn-toggle-particles', text: "ปุ่มเปิดโมเดลอนุภาค: ใช้แสดงภาพจำลองโมเลกุล ช่วยให้เห็นภาพการจับคู่อะตอม", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-eye', targetId: 'btn-toggle-states', text: "ปุ่มสถานะสาร: ใช้สำหรับเปิดหรือซ่อนสัญลักษณ์สถานะของสารในสมการ", requiresAction: false, btnText: "ถัดไป" },
+                { type: 'ui', badgeIcon: 'fa-tags', targetId: 'btn-toggle-names', text: "ปุ่มชื่อสาร: ใช้เปิดหรือปิดการแสดงชื่อเรียกภาษาไทยของสารเคมีข้างใต้สมการด้านบน", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-table', targetId: 'atom-counter-box', text: "ตารางนับอะตอม: คำนวณจำนวนอะตอมฝั่งซ้ายและขวาให้อัตโนมัติทันทีที่ปรับตัวเลข", requiresAction: false, btnText: "ถัดไป" },
                 { type: 'ui', badgeIcon: 'fa-lightbulb', targetId: 'action-buttons-group', text: "แถบปุ่มตัวช่วย: มีปุ่ม 'คำใบ้' ช่วยแนะแนวทาง และปุ่ม 'ข้าม' สำหรับดูเฉลย", requiresAction: false, btnText: "ถัดไป" },
                 
@@ -1548,8 +1687,10 @@
                             hideHeader={true}
                             showStateSymbols={showStateSymbols}
                             showParticles={showParticles}
+                            showWordEquation={showWordEquation}
                             onToggleStateSymbols={onToggleStateSymbols}
                             onToggleParticles={onToggleParticles}
+                            onToggleWordEquation={onToggleWordEquation}
                             isTutorial={true}
                             soundEnabled={soundEnabled}
                             customLogic={{ overrideCoeffs: tutorialCoeffs, onChange: setTutorialCoeffs, onVerify: handleVerify, status: status, setStatus: setStatus, locked: false, hideNextButton: true }}
@@ -1573,7 +1714,7 @@
         };
 
         // โหมดเล่นอิสระ: สุ่มจากทั้งคลังโจทย์หลักและโจทย์แจกแต้ม (1:1:1) ปะปนกัน
-        const FreePlayTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
+        const FreePlayTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, showWordEquation, onToggleWordEquation, soundEnabled }) => {
             const [equation, setEquation] = useState(() => allFreePlayEquations[Math.floor(Math.random() * allFreePlayEquations.length)]);
             const [streak, setStreak] = useState(0);
             
@@ -1591,13 +1732,13 @@
                             <i className="fa-solid fa-fire-flame-curved"></i> Combo: {streak}
                         </div>
                     </div>
-                    <EquationSolver key={equation.id} equation={equation} showStateSymbols={showStateSymbols} showParticles={showParticles} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} soundEnabled={soundEnabled} onSuccessFirstTry={() => setStreak(s => s + 1)} onFail={() => setStreak(0)} onNext={loadRandom} />
+                    <EquationSolver key={equation.id} equation={equation} showStateSymbols={showStateSymbols} showParticles={showParticles} showWordEquation={showWordEquation} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} onToggleWordEquation={onToggleWordEquation} soundEnabled={soundEnabled} onSuccessFirstTry={() => setStreak(s => s + 1)} onFail={() => setStreak(0)} onNext={loadRandom} />
                 </div>
             );
         };
 
         // โหมดคลังโจทย์: นำคำว่า (5 ข้อ) ออกจากตัวเลือกหมวดหมู่
-        const BankTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, soundEnabled }) => {
+        const BankTab = ({ showStateSymbols, onToggleStateSymbols, showParticles, onToggleParticles, showWordEquation, onToggleWordEquation, soundEnabled }) => {
             const [catIdx, setCatIdx] = useState(0);
             const [eqIdx, setEqIdx] = useState(0);
 
@@ -1637,7 +1778,7 @@
                     ) : (
                         <div>
                             <div className="text-center text-slate-400 mb-4 font-medium text-lg">ข้อที่ <span className="text-orange-400">{eqIdx + 1}</span> / {category.equations.length}</div>
-                            <EquationSolver key={`${catIdx}-${eqIdx}`} equation={{...category.equations[eqIdx], categoryName: category.category}} showStateSymbols={showStateSymbols} showParticles={showParticles} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} soundEnabled={soundEnabled} onNext={handleNext} />
+                            <EquationSolver key={`${catIdx}-${eqIdx}`} equation={{...category.equations[eqIdx], categoryName: category.category}} showStateSymbols={showStateSymbols} showParticles={showParticles} showWordEquation={showWordEquation} onToggleStateSymbols={onToggleStateSymbols} onToggleParticles={onToggleParticles} onToggleWordEquation={onToggleWordEquation} soundEnabled={soundEnabled} onNext={handleNext} />
                         </div>
                     )}
                 </div>
@@ -1649,6 +1790,7 @@
             const [activeTab, setActiveTab] = useState('home');
             const [showStateSymbols, setShowStateSymbols] = useState(true);
             const [showParticles, setShowParticles] = useState(false);
+            const [showWordEquation, setShowWordEquation] = useState(false);
             const [soundEnabled, setSoundEnabled] = useState(true);
 
             const handleTabSwitch = (tab) => {
@@ -1662,6 +1804,8 @@
                     onToggleStateSymbols: () => { Sound.click(soundEnabled); setShowStateSymbols(!showStateSymbols); },
                     showParticles, 
                     onToggleParticles: () => { Sound.click(soundEnabled); setShowParticles(!showParticles); },
+                    showWordEquation,
+                    onToggleWordEquation: () => { Sound.click(soundEnabled); setShowWordEquation(!showWordEquation); },
                     soundEnabled
                 };
                 switch(activeTab) {
